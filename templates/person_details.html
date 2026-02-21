@@ -1,0 +1,65 @@
+{{template "header" .}}
+<div class="mb-12 flex flex-col md:flex-row gap-10 items-start">
+    <div class="md:w-64 flex-shrink-0 relative group">
+        {{if .Person.ProfilePath}}
+        <img src="https://image.tmdb.org/t/p/h632{{.Person.ProfilePath}}" alt="{{.Person.Name}}" class="rounded-xl shadow-2xl w-full h-auto object-cover transform transition duration-500 group-hover:scale-105">
+        {{else}}
+        <div class="w-full aspect-[2/3] bg-gray-200 rounded-xl flex items-center justify-center text-gray-400 text-lg">No Photo</div>
+        {{end}}
+    </div>
+    
+    <div class="flex-grow pt-4">
+        <h1 class="text-5xl font-extrabold text-gray-900 mb-2">{{.Person.Name}}</h1>
+        <div class="flex items-center gap-4 mb-6">
+            <span class="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-semibold">{{if .Person.KnownForDepartment}}{{.Person.KnownForDepartment}}{{else}}{{.Person.Department}}{{end}}</span>
+        </div>
+        
+        {{/* If we had biography, it would go here */}}
+    </div>
+</div>
+
+<div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="bg-gray-50 px-8 py-6 border-b border-gray-100">
+        <h2 class="text-2xl font-bold text-gray-800">Writing Credits</h2>
+        <p class="text-gray-500 mt-1">Shows written by {{.Person.Name}}</p>
+    </div>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 p-8 gap-8">
+        {{range .Credits}}
+        <div class="flex flex-col h-full bg-white rounded-lg border border-gray-100 hover:border-indigo-300 hover:shadow-lg transition duration-300 group">
+             <div class="relative overflow-hidden aspect-video rounded-t-lg bg-gray-100">
+                {{if .PosterPath}}
+                 <img src="https://image.tmdb.org/t/p/w500{{.PosterPath}}" class="object-cover w-full h-full opacity-90 group-hover:opacity-100 transition duration-500">
+                {{else}}
+                <div class="flex items-center justify-center h-full text-gray-400 text-sm">No Image</div>
+                {{end}}
+                <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-4">
+                    <h3 class="text-white font-bold text-lg leading-tight shadow-black drop-shadow-md">{{.Name}}</h3>
+                </div>
+            </div>
+            
+            <div class="p-5 flex-grow flex flex-col">
+                <div class="flex flex-wrap gap-2 mb-3">
+                    <span class="bg-indigo-50 text-indigo-700 text-xs px-2 py-1 rounded font-semibold">{{.Job}}</span>
+                    <span class="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded">{{.EpisodeCount}} Episodes</span>
+                </div>
+                <div class="flex items-center text-xs text-gray-400 mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    First Aired: {{.FirstAirDate}}
+                </div>
+                <p class="text-sm text-gray-500 line-clamp-3 mb-4 flex-grow">{{.Overview}}</p>
+                
+                <a href="/show?id={{.ID}}" class="mt-auto text-indigo-600 font-semibold text-sm hover:text-indigo-800 transition flex items-center">
+                    Explore Episodes
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+        {{end}}
+    </div>
+</div>
+{{template "footer" .}}
