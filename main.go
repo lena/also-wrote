@@ -162,10 +162,28 @@ func handlePerson(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var writingCredits []tmdb.Credit
+	type WriterCredit struct {
+		tmdb.Credit
+		Episodes []tmdb.Episode
+	}
+
+	var writingCredits []WriterCredit
 	for _, credit := range credits.Crew {
 		if credit.Department == "Writing" {
-			writingCredits = append(writingCredits, credit)
+			var eps []tmdb.Episode
+			if credit.CreditID != "" {
+				details, err := tmdbClient.GetCreditDetails(credit.CreditID)
+				if err == nil && details != nil {
+					eps = details.Media.Episodes
+				} else {
+					log.Printf("Error fetching credit details for %s: %v", credit.CreditID, err)
+				}
+			}
+
+			writingCredits = append(writingCredits, WriterCredit{
+				Credit:   credit,
+				Episodes: eps,
+			})
 		}
 	}
 

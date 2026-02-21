@@ -120,7 +120,8 @@ type PersonCreditsResponse struct {
 
 type Credit struct {
 	ID           int    `json:"id"`
-	Name         string `json:"name"` // Show Name
+	CreditID     string `json:"credit_id"` // Add this
+	Name         string `json:"name"`      // Show Name
 	Character    string `json:"character"`
 	Job          string `json:"job"`
 	Department   string `json:"department"`
@@ -129,6 +130,12 @@ type Credit struct {
 	PosterPath   string `json:"poster_path"`
 	Overview     string `json:"overview"`
 	MediaType    string `json:"media_type"` // "tv" or "movie"
+}
+
+type CreditDetails struct {
+	Media struct {
+		Episodes []Episode `json:"episodes"`
+	} `json:"media"`
 }
 
 // --- Methods ---
@@ -167,6 +174,13 @@ func (c *Client) GetPersonTVCredits(personID int) (*PersonCreditsResponse, error
 func (c *Client) GetPersonDetails(personID int) (*Person, error) {
 	var result Person
 	endpoint := fmt.Sprintf("/person/%d", personID)
+	err := c.doRequest("GET", endpoint, nil, &result)
+	return &result, err
+}
+
+func (c *Client) GetCreditDetails(creditID string) (*CreditDetails, error) {
+	var result CreditDetails
+	endpoint := fmt.Sprintf("/credit/%s", creditID)
 	err := c.doRequest("GET", endpoint, nil, &result)
 	return &result, err
 }
