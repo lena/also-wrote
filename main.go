@@ -7,8 +7,10 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"writer-fan/internal/tmdb"
 )
 
@@ -125,17 +127,42 @@ func handleShow(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var allSeasons []SeasonWithEpisodes
+	var wg sync.WaitGroup
+	resultsCh := make(chan *tmdb.Season, len(showDetails.Seasons))
+	semaphore := make(chan struct{}, 10) // Limit concurrency
+
 	for _, s := range showDetails.Seasons {
 		if s.SeasonNumber == 0 {
 			continue
 		} // Skip specials usually
-		seasonDetails, err := tmdbClient.GetSeasonDetails(id, s.SeasonNumber)
-		if err != nil {
-			log.Printf("Error fetching season %d: %v", s.SeasonNumber, err)
-			continue
-		}
-		allSeasons = append(allSeasons, SeasonWithEpisodes{*seasonDetails})
+
+		wg.Add(1)
+		go func(sNum int) {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+
+			seasonDetails, err := tmdbClient.GetSeasonDetails(id, sNum)
+			if err != nil {
+				log.Printf("Error fetching season %d: %v", sNum, err)
+				return
+			}
+			resultsCh <- seasonDetails
+		}(s.SeasonNumber)
 	}
+
+	go func() {
+		wg.Wait()
+		close(resultsCh)
+	}()
+
+	for s := range resultsCh {
+		allSeasons = append(allSeasons, SeasonWithEpisodes{*s})
+	}
+
+	sort.Slice(allSeasons, func(i, j int) bool {
+		return allSeasons[i].SeasonNumber < allSeasons[j].SeasonNumber
+	})
 
 	renderTemplate(w, "show_details.html", map[string]interface{}{
 		"Show":    showDetails,
@@ -169,24 +196,50 @@ func handlePerson(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var writingCredits []WriterCredit
+	var wg sync.WaitGroup
+	// Estimate capacity, though channel can grow if buffered enough or consumed async
+	resultsCh := make(chan WriterCredit, len(credits.Crew))
+	semaphore := make(chan struct{}, 10) // Limit concurrency
+
 	for _, credit := range credits.Crew {
 		if credit.Department == "Writing" {
-			var eps []tmdb.Episode
-			if credit.CreditID != "" {
-				details, err := tmdbClient.GetCreditDetails(credit.CreditID)
-				if err == nil && details != nil {
-					eps = details.Media.Episodes
-				} else {
-					log.Printf("Error fetching credit details for %s: %v", credit.CreditID, err)
-				}
-			}
+			wg.Add(1)
+			go func(c tmdb.Credit) {
+				defer wg.Done()
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
 
-			writingCredits = append(writingCredits, WriterCredit{
-				Credit:   credit,
-				Episodes: eps,
-			})
+				var eps []tmdb.Episode
+				if c.CreditID != "" {
+					details, err := tmdbClient.GetCreditDetails(c.CreditID)
+					if err == nil && details != nil {
+						eps = details.Media.Episodes
+					} else {
+						log.Printf("Error fetching credit details for %s: %v", c.CreditID, err)
+					}
+				}
+
+				resultsCh <- WriterCredit{
+					Credit:   c,
+					Episodes: eps,
+				}
+			}(credit)
 		}
 	}
+
+	go func() {
+		wg.Wait()
+		close(resultsCh)
+	}()
+
+	for wc := range resultsCh {
+		writingCredits = append(writingCredits, wc)
+	}
+
+	// Sort by FirstAirDate descending (newest first)
+	sort.Slice(writingCredits, func(i, j int) bool {
+		return writingCredits[i].FirstAirDate > writingCredits[j].FirstAirDate
+	})
 
 	renderTemplate(w, "person_details.html", map[string]interface{}{
 		"Person":  person,
