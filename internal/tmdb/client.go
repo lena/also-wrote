@@ -139,6 +139,25 @@ type CreditDetails struct {
 	} `json:"media"`
 }
 
+type AggregateCreditsResponse struct {
+	Cast []AggregateCredit `json:"cast"`
+	Crew []AggregateCredit `json:"crew"`
+}
+
+type AggregateCredit struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Department  string `json:"department"`
+	Jobs        []Job  `json:"jobs"`
+	ProfilePath string `json:"profile_path"`
+}
+
+type Job struct {
+	CreditID     string `json:"credit_id"`
+	Job          string `json:"job"`
+	EpisodeCount int    `json:"episode_count"`
+}
+
 // --- Methods ---
 
 func (c *Client) SearchTVShows(query string) ([]TVShow, error) {
@@ -160,6 +179,13 @@ func (c *Client) GetTVShowDetails(id int) (*TVShowDetails, error) {
 func (c *Client) GetSeasonDetails(tvID, seasonNumber int) (*Season, error) {
 	var result Season
 	endpoint := fmt.Sprintf("/tv/%d/season/%d", tvID, seasonNumber)
+	err := c.doRequest("GET", endpoint, nil, &result)
+	return &result, err
+}
+
+func (c *Client) GetSeasonAggregateCredits(tvID, seasonNumber int) (*AggregateCreditsResponse, error) {
+	var result AggregateCreditsResponse
+	endpoint := fmt.Sprintf("/tv/%d/season/%d/aggregate_credits", tvID, seasonNumber)
 	err := c.doRequest("GET", endpoint, nil, &result)
 	return &result, err
 }

@@ -233,8 +233,21 @@ func handleEpisode(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error fetching show details: %v", err)
 	}
 
+	seasonCredits, err := tmdbClient.GetSeasonAggregateCredits(showID, seasonNum)
+	var writingStaff []tmdb.AggregateCredit
+	if err == nil {
+		for _, credit := range seasonCredits.Crew {
+			if credit.Department == "Writing" {
+				writingStaff = append(writingStaff, credit)
+			}
+		}
+	} else {
+		log.Printf("Error fetching season credits: %v", err)
+	}
+
 	renderTemplate(w, "episode_details.html", map[string]interface{}{
-		"Episode": episode,
-		"Show":    show,
+		"Episode":      episode,
+		"Show":         show,
+		"WritingStaff": writingStaff,
 	})
 }

@@ -68,6 +68,27 @@
                     </div>
                 </div>
             </div>
+
+             <div class="mt-8">
+                <h3 class="text-lg font-bold text-gray-900 mb-4 border-b pb-2">Season Writing Staff</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {{range .WritingStaff}}
+                    <a href="/person?id={{.ID}}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition group">
+                        {{if .ProfilePath}}
+                        <img src="https://image.tmdb.org/t/p/w200{{.ProfilePath}}" class="w-10 h-10 rounded-full object-cover shadow-sm group-hover:ring-2 ring-indigo-500 transition">
+                        {{else}}
+                        <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-500 font-bold text-sm">{{printf "%.1s" .Name}}</div>
+                        {{end}}
+                        <div>
+                            <p class="font-bold text-gray-900 group-hover:text-indigo-600 transition text-sm">{{.Name}}</p>
+                            <p class="text-xs text-gray-500 truncate max-w-[12rem]">
+                                {{range $i, $job := .Jobs}}{{if $i}}, {{end}}{{$job.Job}}{{end}}
+                            </p>
+                        </div>
+                    </a>
+                    {{end}}
+                </div>
+             </div>
              
 
         </div>
