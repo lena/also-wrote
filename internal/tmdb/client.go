@@ -107,8 +107,9 @@ type Episode struct {
 type Person struct {
 	ID                 int    `json:"id"`
 	Name               string `json:"name"`
-	Job                string `json:"job"`                  // Check for "Writer", "Screenplay", "Teleplay", "Story"
-	Department         string `json:"department"`           // "Writing", "Production"
+	Job                string `json:"job"`
+	Character          string `json:"character"`
+	Department         string `json:"department"`
 	KnownForDepartment string `json:"known_for_department"` // In person details
 	ProfilePath        string `json:"profile_path"`
 }
