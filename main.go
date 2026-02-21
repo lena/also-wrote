@@ -54,6 +54,7 @@ func main() {
 	http.HandleFunc("/search", handleSearch)
 	http.HandleFunc("/show", handleShow)
 	http.HandleFunc("/person", handlePerson)
+	http.HandleFunc("/episode", handleEpisode)
 
 	// Serve static files (CSS, images)
 	fs := http.FileServer(http.Dir("static"))
@@ -198,4 +199,42 @@ func renderTemplate(w http.ResponseWriter, tmpl string, data interface{}) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func handleEpisode(w http.ResponseWriter, r *http.Request) {
+	showIDStr := r.URL.Query().Get("show_id")
+	seasonNumStr := r.URL.Query().Get("season")
+	episodeNumStr := r.URL.Query().Get("episode")
+
+	showID, err := strconv.Atoi(showIDStr)
+	if err != nil {
+		http.Error(w, "Invalid show ID", http.StatusBadRequest)
+		return
+	}
+	seasonNum, err := strconv.Atoi(seasonNumStr)
+	if err != nil {
+		http.Error(w, "Invalid season number", http.StatusBadRequest)
+		return
+	}
+	episodeNum, err := strconv.Atoi(episodeNumStr)
+	if err != nil {
+		http.Error(w, "Invalid episode number", http.StatusBadRequest)
+		return
+	}
+
+	episode, err := tmdbClient.GetEpisodeDetails(showID, seasonNum, episodeNum)
+	if err != nil {
+		http.Error(w, "Error fetching episode details: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	show, err := tmdbClient.GetTVShowDetails(showID)
+	if err != nil {
+		log.Printf("Error fetching show details: %v", err)
+	}
+
+	renderTemplate(w, "episode_details.html", map[string]interface{}{
+		"Episode": episode,
+		"Show":    show,
+	})
 }

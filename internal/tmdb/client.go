@@ -184,3 +184,15 @@ func (c *Client) GetCreditDetails(creditID string) (*CreditDetails, error) {
 	err := c.doRequest("GET", endpoint, nil, &result)
 	return &result, err
 }
+
+func (c *Client) GetEpisodeDetails(tvID, seasonNumber, episodeNumber int) (*Episode, error) {
+	var result Episode
+	endpoint := fmt.Sprintf("/tv/%d/season/%d/episode/%d", tvID, seasonNumber, episodeNumber)
+	params := url.Values{}
+	params.Add("append_to_response", "credits") // credits might be default but let's be safe or check docs
+	// Actually for /episode/{num}, the credits are usually in "crew" and "guest_stars" fields directly.
+	// But let's check if we need append_to_response=credits.
+	// Standard response includes crew/guest_stars.
+	err := c.doRequest("GET", endpoint, nil, &result)
+	return &result, err
+}

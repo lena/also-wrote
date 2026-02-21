@@ -30,18 +30,22 @@
                 <div class="p-6 hover:bg-gray-50 transition duration-150">
                     <div class="flex flex-col md:flex-row gap-6">
                         <div class="md:w-48 flex-shrink-0 relative group">
-                            {{if .StillPath}}
-                            <img src="https://image.tmdb.org/t/p/w300{{.StillPath}}" alt="{{.Name}}" class="rounded-lg shadow-md w-full h-28 object-cover transition transform group-hover:scale-105 duration-300">
-                            {{else}}
-                            <div class="w-full h-28 bg-gray-200 rounded-lg flex items-center justify-center text-xs text-gray-400">No Image</div>
-                            {{end}}
-                            <div class="absolute top-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded font-mono">E{{.EpisodeNumber}}</div>
+                            <a href="/episode?show_id={{$.Show.ID}}&season={{.SeasonNumber}}&episode={{.EpisodeNumber}}" class="block">
+                                {{if .StillPath}}
+                                <img src="https://image.tmdb.org/t/p/w300{{.StillPath}}" alt="{{.Name}}" class="rounded-lg shadow-md w-full h-28 object-cover transition transform group-hover:scale-105 duration-300">
+                                {{else}}
+                                <div class="w-full h-28 bg-gray-200 rounded-lg flex items-center justify-center text-xs text-gray-400">No Image</div>
+                                {{end}}
+                                <div class="absolute top-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded font-mono">E{{.EpisodeNumber}}</div>
+                            </a>
                         </div>
                         <div class="flex-grow">
                             <div class="flex justify-between items-start mb-2">
-                                <h3 class="font-bold text-lg text-gray-900">
-                                    {{.Name}}
-                                </h3>
+                                <a href="/episode?show_id={{$.Show.ID}}&season={{.SeasonNumber}}&episode={{.EpisodeNumber}}" class="hover:underline">
+                                    <h3 class="font-bold text-lg text-gray-900">
+                                        {{.Name}}
+                                    </h3>
+                                </a>
                                 <span class="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-1 rounded">{{.AirDate}}</span>
                             </div>
                             <p class="text-gray-600 text-sm mb-4 line-clamp-2 leading-relaxed">{{.Overview}}</p>

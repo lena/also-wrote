@@ -11,8 +11,6 @@
         <div class="flex items-center gap-4 mb-6">
             <span class="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm font-semibold">{{if .Person.KnownForDepartment}}{{.Person.KnownForDepartment}}{{else}}{{.Person.Department}}{{end}}</span>
         </div>
-        
-        {{/* If we had biography, it would go here */}}
     </div>
 </div>
 
@@ -24,19 +22,22 @@
     
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 p-8 gap-8">
         {{range .Credits}}
-        <a href="/show?id={{.ID}}" class="flex flex-col h-full bg-white rounded-lg border border-gray-100 hover:border-indigo-300 hover:shadow-lg transition duration-300 group overflow-hidden">
-             {{if .PosterPath}}
-             <div class="relative overflow-hidden aspect-video bg-gray-100">
+        {{$showID := .ID}}
+        <div class="flex flex-col h-full bg-white rounded-lg border border-gray-100 hover:border-indigo-300 hover:shadow-lg transition duration-300 group overflow-hidden">
+             <a href="/show?id={{.ID}}" class="block relative overflow-hidden aspect-video bg-gray-100">
+                 {{if .PosterPath}}
                  <img src="https://image.tmdb.org/t/p/w500{{.PosterPath}}" class="object-cover w-full h-full opacity-90 group-hover:opacity-100 transition duration-500">
                  <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-4">
                      <h3 class="text-white font-bold text-lg leading-tight shadow-black drop-shadow-md">{{.Name}}</h3>
                  </div>
-             </div>
-             {{else}}
-             <div class="p-4 bg-gray-50 border-b">
-                 <h3 class="font-bold text-lg text-gray-900">{{.Name}}</h3>
-             </div>
-             {{end}}
+                 {{else}}
+                 <div class="flex items-center justify-center h-full w-full">
+                     <div class="p-4 text-center">
+                        <h3 class="font-bold text-lg text-gray-900">{{.Name}}</h3>
+                     </div>
+                 </div>
+                 {{end}}
+             </a>
             
             <div class="p-5 flex-grow flex flex-col">
                 <div class="flex flex-wrap gap-2 mb-3">
@@ -56,23 +57,25 @@
                     <p class="text-xs font-bold text-gray-500 uppercase mb-2">Credited Episodes:</p>
                     <ul class="space-y-1 max-h-48 overflow-y-auto custom-scrollbar pr-2">
                         {{range .Episodes}}
-                        <li class="text-sm text-gray-700 truncate hover:text-indigo-600 transition flex items-center">
-                            <span class="font-mono text-xs text-indigo-500 font-bold mr-2 w-10 text-right shrink-0">S{{.SeasonNumber}} E{{.EpisodeNumber}}</span> 
-                            <span class="truncate" title="{{.Name}}">{{.Name}}</span>
+                        <li>
+                            <a href="/episode?show_id={{$showID}}&season={{.SeasonNumber}}&episode={{.EpisodeNumber}}" class="text-sm text-gray-700 truncate hover:text-indigo-600 transition flex items-center group/item">
+                                <span class="font-mono text-xs text-indigo-500 font-bold mr-2 w-10 text-right shrink-0 group-hover/item:text-indigo-700">S{{.SeasonNumber}} E{{.EpisodeNumber}}</span> 
+                                <span class="truncate" title="{{.Name}}">{{.Name}}</span>
+                            </a>
                         </li>
                         {{end}}
                     </ul>
                 </div>
                 {{end}}
                 
-                <div class="mt-4 pt-2 text-indigo-600 font-semibold text-sm group-hover:text-indigo-800 transition flex items-center justify-end">
+                <a href="/show?id={{.ID}}" class="mt-4 pt-2 text-indigo-600 font-semibold text-sm group-hover:text-indigo-800 transition flex items-center justify-end">
                     Go to Show
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
                     </svg>
-                </div>
+                </a>
             </div>
-        </a>
+        </div>
         {{end}}
     </div>
 </div>

@@ -1,0 +1,93 @@
+{{template "header" .}}
+<div class="mb-8">
+    <div class="text-sm text-gray-500 mb-4 flex items-center gap-2">
+        <a href="/show?id={{.Show.ID}}" class="hover:text-indigo-600 transition font-medium">{{.Show.Name}}</a>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+        <span>Season {{.Episode.SeasonNumber}}</span>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+        <span class="text-gray-900 font-semibold">Episode {{.Episode.EpisodeNumber}}</span>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-10">
+        <div class="md:col-span-5 lg:col-span-4">
+             {{if .Episode.StillPath}}
+             <img src="https://image.tmdb.org/t/p/w500{{.Episode.StillPath}}" alt="{{.Episode.Name}}" class="rounded-xl shadow-lg w-full mb-4">
+             {{else}}
+             <div class="w-full aspect-video bg-gray-200 rounded-xl flex items-center justify-center text-gray-400">No Image</div>
+             {{end}}
+        </div>
+        <div class="md:col-span-7 lg:col-span-8">
+            <h1 class="text-4xl font-extrabold text-gray-900 mb-2">{{.Episode.Name}}</h1>
+            <p class="text-gray-500 mb-6">Aired on {{.Episode.AirDate}}</p>
+            <p class="text-lg text-gray-700 leading-relaxed mb-8">{{.Episode.Overview}}</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900 mb-4 border-b pb-2">Writers</h3>
+                    <div class="space-y-3">
+                        {{range .Episode.Crew}}
+                            {{if or (eq .Job "Writer") (eq .Job "Screenplay") (eq .Job "Teleplay") (eq .Job "Story")}}
+                            <a href="/person?id={{.ID}}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition group -mx-2">
+                                {{if .ProfilePath}}
+                                <img src="https://image.tmdb.org/t/p/w200{{.ProfilePath}}" class="w-10 h-10 rounded-full object-cover shadow-sm group-hover:ring-2 ring-indigo-500 transition">
+                                {{else}}
+                                <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-500 font-bold text-sm">{{printf "%.1s" .Name}}</div>
+                                {{end}}
+                                <div>
+                                    <p class="font-bold text-gray-900 group-hover:text-indigo-600 transition">{{.Name}}</p>
+                                    <p class="text-xs text-gray-500">{{.Job}}</p>
+                                </div>
+                            </a>
+                            {{end}}
+                        {{end}}
+                    </div>
+                </div>
+                
+                <div>
+                    <h3 class="text-lg font-bold text-gray-900 mb-4 border-b pb-2">Directors</h3>
+                    <div class="space-y-3">
+                        {{range .Episode.Crew}}
+                            {{if eq .Job "Director"}}
+                            <a href="/person?id={{.ID}}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition group -mx-2">
+                                {{if .ProfilePath}}
+                                <img src="https://image.tmdb.org/t/p/w200{{.ProfilePath}}" class="w-10 h-10 rounded-full object-cover shadow-sm group-hover:ring-2 ring-indigo-500 transition">
+                                {{else}}
+                                <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-500 font-bold text-sm">{{printf "%.1s" .Name}}</div>
+                                {{end}}
+                                <div>
+                                    <p class="font-bold text-gray-900 group-hover:text-indigo-600 transition">{{.Name}}</p>
+                                    <p class="text-xs text-gray-500">Director</p>
+                                </div>
+                            </a>
+                            {{end}}
+                        {{end}}
+                    </div>
+                </div>
+            </div>
+             
+             <div class="mt-8">
+                <h3 class="text-lg font-bold text-gray-900 mb-4 border-b pb-2">Guest Stars</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {{range .Episode.GuestStars}}
+                    <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition">
+                        {{if .ProfilePath}}
+                        <img src="https://image.tmdb.org/t/p/w200{{.ProfilePath}}" class="w-10 h-10 rounded-full object-cover shadow-sm">
+                        {{else}}
+                        <div class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-xs">?</div>
+                        {{end}}
+                        <div>
+                            <p class="font-bold text-gray-900 text-sm">{{.Name}}</p>
+                            <p class="text-xs text-gray-500 truncate max-w-[12rem]" title="{{.Character}}">{{.Character}}</p>
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+             </div>
+        </div>
+    </div>
+</div>
+{{template "footer" .}}
