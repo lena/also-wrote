@@ -139,6 +139,13 @@ type CreditDetails struct {
 	} `json:"media"`
 }
 
+type SearchPeopleResponse struct {
+	Page         int      `json:"page"`
+	Results      []Person `json:"results"`
+	TotalPages   int      `json:"total_pages"`
+	TotalResults int      `json:"total_results"`
+}
+
 type AggregateCreditsResponse struct {
 	Cast []AggregateCredit `json:"cast"`
 	Crew []AggregateCredit `json:"crew"`
@@ -170,6 +177,16 @@ func (c *Client) SearchTVShows(query string) ([]TVShow, error) {
 	return result.Results, err
 }
 
+func (c *Client) SearchPeople(query string) ([]Person, error) {
+	params := url.Values{}
+	params.Add("query", query)
+	params.Add("language", "en-US")
+
+	var result SearchPeopleResponse
+	err := c.doRequest("GET", "/search/person", params, &result)
+	return result.Results, err
+}
+
 func (c *Client) GetTVShowDetails(id int) (*TVShowDetails, error) {
 	var result TVShowDetails
 	err := c.doRequest("GET", fmt.Sprintf("/tv/%d", id), nil, &result)
@@ -181,6 +198,13 @@ func (c *Client) GetSeasonDetails(tvID, seasonNumber int) (*Season, error) {
 	endpoint := fmt.Sprintf("/tv/%d/season/%d", tvID, seasonNumber)
 	err := c.doRequest("GET", endpoint, nil, &result)
 	return &result, err
+}
+
+func (c *Client) GetTrendingTVShows() ([]TVShow, error) {
+	var result SearchTVResponse
+	// Trending endpoint structure is similar to search results
+	err := c.doRequest("GET", "/trending/tv/week", nil, &result)
+	return result.Results, err
 }
 
 func (c *Client) GetSeasonAggregateCredits(tvID, seasonNumber int) (*AggregateCreditsResponse, error) {

@@ -1,4 +1,5 @@
 {{template "header" .}}
+<div class="container mx-auto px-4 py-8">
 <div class="mb-8">
     <div class="text-sm text-gray-500 mb-4 flex items-center gap-2">
         <a href="/show?id={{.Show.ID}}" class="hover:text-indigo-600 transition font-medium">{{.Show.Name}}</a>
@@ -93,5 +94,6 @@
 
         </div>
     </div>
+</div>
 </div>
 {{template "footer" .}}

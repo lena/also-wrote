@@ -76,7 +76,65 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	renderTemplate(w, "index.html", nil)
+
+	suggestedTitles := []string{"The Wire", "Better Call Saul", "BoJack Horseman"}
+	var suggestedShows []tmdb.TVShow
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	for _, title := range suggestedTitles {
+		wg.Add(1)
+		go func(t string) {
+			defer wg.Done()
+			results, err := tmdbClient.SearchTVShows(t)
+			if err == nil && len(results) > 0 {
+				mu.Lock()
+				suggestedShows = append(suggestedShows, results[0])
+				mu.Unlock()
+			}
+		}(title)
+	}
+	wg.Wait()
+
+	// Create a map for quick lookup by lowercased name
+	showMap := make(map[string]tmdb.TVShow)
+	for _, s := range suggestedShows {
+		showMap[strings.ToLower(s.Name)] = s
+	}
+
+	orderedShows := make([]tmdb.TVShow, 0, len(suggestedTitles))
+	seenIDs := make(map[int]bool)
+
+	for _, title := range suggestedTitles {
+		lowerTitle := strings.ToLower(title)
+
+		var matchedShow tmdb.TVShow
+		found := false
+
+		// 1. Exact match in map
+		if s, ok := showMap[lowerTitle]; ok {
+			matchedShow = s
+			found = true
+		} else {
+			// 2. Contains match
+			for _, s := range suggestedShows {
+				if strings.Contains(strings.ToLower(s.Name), lowerTitle) {
+					matchedShow = s
+					found = true
+					break
+				}
+			}
+		}
+
+		if found && !seenIDs[matchedShow.ID] {
+			orderedShows = append(orderedShows, matchedShow)
+			seenIDs[matchedShow.ID] = true
+		}
+	}
+
+	renderTemplate(w, "index.html", map[string]interface{}{
+		"SuggestedShows": orderedShows,
+	})
 }
 
 func handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -86,26 +144,66 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 1. Search TV Shows
 	results, err := tmdbClient.SearchTVShows(query)
 	if err != nil {
 		http.Error(w, "Error searching shows: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if len(results) == 0 {
-		renderTemplate(w, "no_results.html", query)
+	if len(results) > 0 {
+		// Filter for exact matches (case-insensitive)
+		var exactMatches []tmdb.TVShow
+		for _, show := range results {
+			if strings.EqualFold(show.Name, query) {
+				exactMatches = append(exactMatches, show)
+			}
+		}
+
+		// If we have one or more exact matches, prioritize them
+		if len(exactMatches) > 0 {
+			results = exactMatches
+		}
+
+		if len(results) == 1 {
+			http.Redirect(w, r, fmt.Sprintf("/show?id=%d", results[0].ID), http.StatusFound)
+			return
+		}
+		renderTemplate(w, "search_results.html", map[string]interface{}{
+			"Query":   query,
+			"Results": results,
+		})
 		return
 	}
 
-	if len(results) == 1 {
-		http.Redirect(w, r, fmt.Sprintf("/show?id=%d", results[0].ID), http.StatusFound)
+	// 2. Search People
+	people, err := tmdbClient.SearchPeople(query)
+	if err != nil {
+		http.Error(w, "Error searching people: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	renderTemplate(w, "search_results.html", map[string]interface{}{
-		"Query":   query,
-		"Results": results,
-	})
+	var writers []tmdb.Person
+	for _, p := range people {
+		if p.KnownForDepartment == "Writing" {
+			writers = append(writers, p)
+		}
+	}
+
+	if len(writers) > 0 {
+		if len(writers) == 1 {
+			http.Redirect(w, r, fmt.Sprintf("/person?id=%d", writers[0].ID), http.StatusFound)
+			return
+		}
+		renderTemplate(w, "search_results_people.html", map[string]interface{}{
+			"Query":   query,
+			"Results": writers,
+		})
+		return
+	}
+
+	// 3. No results found
+	renderTemplate(w, "no_results.html", query)
 }
 
 func handleShow(w http.ResponseWriter, r *http.Request) {

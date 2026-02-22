@@ -1,0 +1,28 @@
+{{template "header" .}}
+<div class="container mx-auto px-4 py-8">
+    <div class="mb-8 border-b pb-4">
+        <h2 class="text-3xl font-bold text-gray-800">Writer Results for "<span class="text-indigo-600">{{.Query}}</span>"</h2>
+        <p class="text-gray-500 mt-2">Found {{len .Results}} writers matching your search.</p>
+    </div>
+    
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">
+        {{range .Results}}
+        <a href="/person?id={{.ID}}" class="group block bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition duration-300">
+            <div class="relative overflow-hidden aspect-[2/3]">
+                {{if .ProfilePath}}
+                <img src="https://image.tmdb.org/t/p/w500{{.ProfilePath}}" alt="{{.Name}}" class="w-full h-full object-cover group-hover:scale-105 transition duration-500">
+                {{else}}
+                <div class="w-full h-full bg-gray-100 flex flex-col items-center justify-center text-gray-400 p-4 text-center">
+                    <span class="text-sm font-medium">No Photo</span>
+                </div>
+                {{end}}
+            </div>
+            <div class="p-4">
+                <h3 class="font-bold text-lg mb-1 leading-tight text-gray-900 group-hover:text-indigo-600 transition">{{.Name}}</h3>
+                <p class="text-sm text-gray-500 font-medium">{{if .KnownForDepartment}}{{.KnownForDepartment}}{{else}}{{.Department}}{{end}}</p>
+            </div>
+        </a>
+        {{end}}
+    </div>
+</div>
+{{template "footer" .}}
