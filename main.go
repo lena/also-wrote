@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"sort"
@@ -24,7 +25,8 @@ func init() {
 		log.Println("Warning: TMDB_API_TOKEN environment variable is not set")
 	}
 	tmdbClient = tmdb.NewClient(token)
-	// Parse all templates in the templates folder
+	// Declare error type explicitly because using assignment on next line
+	// to update the the *package-level* templates variable
 	var err error
 	templates, err = template.ParseGlob("templates/*.html")
 	if err != nil {
@@ -33,6 +35,7 @@ func init() {
 }
 
 func loadEnv() {
+	// Open .env file and load necessary TMDB API token
 	file, err := os.Open(".env")
 	if err != nil {
 		return
@@ -52,15 +55,12 @@ func loadEnv() {
 }
 
 func main() {
+	// Order doesn't matter because longest path match is used
 	http.HandleFunc("/", handleHome)
 	http.HandleFunc("/search", handleSearch)
 	http.HandleFunc("/show", handleShow)
 	http.HandleFunc("/person", handlePerson)
 	http.HandleFunc("/episode", handleEpisode)
-
-	// Serve static files (CSS, images)
-	fs := http.FileServer(http.Dir("static"))
-	http.Handle("/static/", http.StripPrefix("/static/", fs))
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -73,16 +73,44 @@ func main() {
 
 func handleHome(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
-		http.NotFound(w, r)
+		w.WriteHeader(http.StatusNotFound)
+		renderTemplate(w, "404.html", nil)
 		return
 	}
 
-	suggestedTitles := []string{"The Wire", "Better Call Saul", "BoJack Horseman"}
+	// Pick 3 random titles from the list, then fetch their data in parallel using goroutines
+	allSuggestedTitles := []string{
+		"Arrested Development",
+		"Atlanta",
+		"Battlestar Galactica",
+		"Better Call Saul",
+		"Better Off Ted",
+		"BoJack Horseman",
+		"Buffy the Vampire Slayer",
+		"Glow",
+		"Hacks",
+		"Insecure",
+		"Parks and Recreation",
+		"The Bear",
+		"The Simpsons",
+		"The Sopranos",
+		"The Wire",
+	}
+
+	// Shuffle using Fisher-Yates (Knuth) shuffle algorithm on a copy of the slice
+	suggestedTitles := make([]string, len(allSuggestedTitles))
+	copy(suggestedTitles, allSuggestedTitles)
+	rand.Shuffle(len(suggestedTitles), func(i, j int) {
+		suggestedTitles[i], suggestedTitles[j] = suggestedTitles[j], suggestedTitles[i]
+	})
+
+	selectedTitles := suggestedTitles[:3]
+
 	var suggestedShows []tmdb.TVShow
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
-	for _, title := range suggestedTitles {
+	for _, title := range selectedTitles {
 		wg.Add(1)
 		go func(t string) {
 			defer wg.Done()
@@ -96,58 +124,32 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 	wg.Wait()
 
-	// Create a map for quick lookup by lowercased name
-	showMap := make(map[string]tmdb.TVShow)
-	for _, s := range suggestedShows {
-		showMap[strings.ToLower(s.Name)] = s
-	}
-
-	orderedShows := make([]tmdb.TVShow, 0, len(suggestedTitles))
-	seenIDs := make(map[int]bool)
-
-	for _, title := range suggestedTitles {
-		lowerTitle := strings.ToLower(title)
-
-		var matchedShow tmdb.TVShow
-		found := false
-
-		// 1. Exact match in map
-		if s, ok := showMap[lowerTitle]; ok {
-			matchedShow = s
-			found = true
-		} else {
-			// 2. Contains match
-			for _, s := range suggestedShows {
-				if strings.Contains(strings.ToLower(s.Name), lowerTitle) {
-					matchedShow = s
-					found = true
-					break
-				}
-			}
-		}
-
-		if found && !seenIDs[matchedShow.ID] {
-			orderedShows = append(orderedShows, matchedShow)
-			seenIDs[matchedShow.ID] = true
-		}
-	}
-
 	renderTemplate(w, "index.html", map[string]interface{}{
-		"SuggestedShows": orderedShows,
+		"SuggestedShows": suggestedShows,
+	})
+}
+
+func renderError(w http.ResponseWriter, title, message string, status int) {
+	w.WriteHeader(status)
+	renderTemplate(w, "404.html", map[string]interface{}{
+		"ErrorTitle":   title,
+		"ErrorMessage": message,
 	})
 }
 
 func handleSearch(w http.ResponseWriter, r *http.Request) {
+	// The search logic handles both TV shows and writers.
+	// Preference for TV shows since the point is writer discovery.
 	query := r.URL.Query().Get("q")
 	if query == "" {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
 
-	// 1. Search TV Shows
+	// First, search TV shows
 	results, err := tmdbClient.SearchTVShows(query)
 	if err != nil {
-		http.Error(w, "Error searching shows: "+err.Error(), http.StatusInternalServerError)
+		renderError(w, "Search Error", "Error searching shows: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -176,10 +178,10 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Search People
+	// If no TV shows are found, search writers
 	people, err := tmdbClient.SearchPeople(query)
 	if err != nil {
-		http.Error(w, "Error searching people: "+err.Error(), http.StatusInternalServerError)
+		renderError(w, "Search Error", "Error searching people: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -190,19 +192,27 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// If we find any writers, display only writers
+	// If we find other people who may be better known as actors or producers, display them
+	var peopleResults []tmdb.Person
 	if len(writers) > 0 {
-		if len(writers) == 1 {
-			http.Redirect(w, r, fmt.Sprintf("/person?id=%d", writers[0].ID), http.StatusFound)
+		peopleResults = writers
+	} else {
+		peopleResults = people
+	}
+
+	if len(peopleResults) > 0 {
+		if len(peopleResults) == 1 {
+			http.Redirect(w, r, fmt.Sprintf("/person?id=%d", peopleResults[0].ID), http.StatusFound)
 			return
 		}
 		renderTemplate(w, "search_results_people.html", map[string]interface{}{
 			"Query":   query,
-			"Results": writers,
+			"Results": peopleResults,
 		})
 		return
 	}
 
-	// 3. No results found
 	renderTemplate(w, "no_results.html", query)
 }
 
@@ -210,21 +220,17 @@ func handleShow(w http.ResponseWriter, r *http.Request) {
 	idStr := r.URL.Query().Get("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		http.Error(w, "Invalid show ID", http.StatusBadRequest)
+		renderError(w, "Invalid Show", "The show ID provided is invalid.", http.StatusBadRequest)
 		return
 	}
 
 	showDetails, err := tmdbClient.GetTVShowDetails(id)
 	if err != nil {
-		http.Error(w, "Error fetching show details: "+err.Error(), http.StatusInternalServerError)
+		renderError(w, "Show Not Found", "We couldn't find details for this show. It may not exist or there was a problem fetching the data.", http.StatusNotFound)
 		return
 	}
 
-	type SeasonWithEpisodes struct {
-		tmdb.Season
-	}
-
-	var allSeasons []SeasonWithEpisodes
+	var allSeasons []*tmdb.Season
 	var wg sync.WaitGroup
 	resultsCh := make(chan *tmdb.Season, len(showDetails.Seasons))
 	semaphore := make(chan struct{}, 10) // Limit concurrency
@@ -232,7 +238,7 @@ func handleShow(w http.ResponseWriter, r *http.Request) {
 	for _, s := range showDetails.Seasons {
 		if s.SeasonNumber == 0 {
 			continue
-		} // Skip specials usually
+		} // Skip specials
 
 		wg.Add(1)
 		go func(sNum int) {
@@ -255,9 +261,10 @@ func handleShow(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	for s := range resultsCh {
-		allSeasons = append(allSeasons, SeasonWithEpisodes{*s})
+		allSeasons = append(allSeasons, s)
 	}
 
+	// Sort seasons by season number
 	sort.Slice(allSeasons, func(i, j int) bool {
 		return allSeasons[i].SeasonNumber < allSeasons[j].SeasonNumber
 	})
@@ -272,19 +279,19 @@ func handlePerson(w http.ResponseWriter, r *http.Request) {
 	idStr := r.URL.Query().Get("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		http.Error(w, "Invalid person ID", http.StatusBadRequest)
+		renderError(w, "Invalid Person", "The person ID provided is invalid.", http.StatusBadRequest)
 		return
 	}
 
 	person, err := tmdbClient.GetPersonDetails(id)
 	if err != nil {
-		http.Error(w, "Error fetching person details: "+err.Error(), http.StatusInternalServerError)
+		renderError(w, "Person Not Found", "We couldn't find details for this person.", http.StatusNotFound)
 		return
 	}
 
 	credits, err := tmdbClient.GetPersonTVCredits(id)
 	if err != nil {
-		http.Error(w, "Error fetching person credits: "+err.Error(), http.StatusInternalServerError)
+		renderError(w, "Credits Not Found", "We couldn't fetch credits for this person.", http.StatusInternalServerError)
 		return
 	}
 
@@ -295,7 +302,6 @@ func handlePerson(w http.ResponseWriter, r *http.Request) {
 
 	var writingCredits []WriterCredit
 	var wg sync.WaitGroup
-	// Estimate capacity, though channel can grow if buffered enough or consumed async
 	resultsCh := make(chan WriterCredit, len(credits.Crew))
 	semaphore := make(chan struct{}, 10) // Limit concurrency
 
@@ -334,7 +340,7 @@ func handlePerson(w http.ResponseWriter, r *http.Request) {
 		writingCredits = append(writingCredits, wc)
 	}
 
-	// Sort by FirstAirDate descending (newest first)
+	// Sort by show's first air date descending (newest first)
 	sort.Slice(writingCredits, func(i, j int) bool {
 		return writingCredits[i].FirstAirDate > writingCredits[j].FirstAirDate
 	})
@@ -359,23 +365,23 @@ func handleEpisode(w http.ResponseWriter, r *http.Request) {
 
 	showID, err := strconv.Atoi(showIDStr)
 	if err != nil {
-		http.Error(w, "Invalid show ID", http.StatusBadRequest)
+		renderError(w, "Invalid Show ID", "The show ID provided is invalid.", http.StatusBadRequest)
 		return
 	}
 	seasonNum, err := strconv.Atoi(seasonNumStr)
 	if err != nil {
-		http.Error(w, "Invalid season number", http.StatusBadRequest)
+		renderError(w, "Invalid Season Number", "The season number provided is invalid.", http.StatusBadRequest)
 		return
 	}
 	episodeNum, err := strconv.Atoi(episodeNumStr)
 	if err != nil {
-		http.Error(w, "Invalid episode number", http.StatusBadRequest)
+		renderError(w, "Invalid Episode Number", "The episode number provided is invalid.", http.StatusBadRequest)
 		return
 	}
 
 	episode, err := tmdbClient.GetEpisodeDetails(showID, seasonNum, episodeNum)
 	if err != nil {
-		http.Error(w, "Error fetching episode details: "+err.Error(), http.StatusInternalServerError)
+		renderError(w, "Episode Not Found", "We couldn't find details for this episode.", http.StatusNotFound)
 		return
 	}
 

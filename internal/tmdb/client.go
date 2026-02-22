@@ -101,16 +101,16 @@ type Episode struct {
 	SeasonNumber  int      `json:"season_number"`
 	StillPath     string   `json:"still_path"`
 	Crew          []Person `json:"crew"`
-	GuestStars    []Person `json:"guest_stars"`
 }
 
+// Calling this Person instead of Writer because this struct is reused for other roles like Director
 type Person struct {
 	ID                 int    `json:"id"`
 	Name               string `json:"name"`
 	Job                string `json:"job"`
 	Character          string `json:"character"`
 	Department         string `json:"department"`
-	KnownForDepartment string `json:"known_for_department"` // In person details
+	KnownForDepartment string `json:"known_for_department"`
 	ProfilePath        string `json:"profile_path"`
 }
 
@@ -121,8 +121,8 @@ type PersonCreditsResponse struct {
 
 type Credit struct {
 	ID           int    `json:"id"`
-	CreditID     string `json:"credit_id"` // Add this
-	Name         string `json:"name"`      // Show Name
+	CreditID     string `json:"credit_id"`
+	Name         string `json:"name"`
 	Character    string `json:"character"`
 	Job          string `json:"job"`
 	Department   string `json:"department"`
@@ -130,7 +130,6 @@ type Credit struct {
 	FirstAirDate string `json:"first_air_date"`
 	PosterPath   string `json:"poster_path"`
 	Overview     string `json:"overview"`
-	MediaType    string `json:"media_type"` // "tv" or "movie"
 }
 
 type CreditDetails struct {
@@ -200,13 +199,6 @@ func (c *Client) GetSeasonDetails(tvID, seasonNumber int) (*Season, error) {
 	return &result, err
 }
 
-func (c *Client) GetTrendingTVShows() ([]TVShow, error) {
-	var result SearchTVResponse
-	// Trending endpoint structure is similar to search results
-	err := c.doRequest("GET", "/trending/tv/week", nil, &result)
-	return result.Results, err
-}
-
 func (c *Client) GetSeasonAggregateCredits(tvID, seasonNumber int) (*AggregateCreditsResponse, error) {
 	var result AggregateCreditsResponse
 	endpoint := fmt.Sprintf("/tv/%d/season/%d/aggregate_credits", tvID, seasonNumber)
@@ -216,8 +208,7 @@ func (c *Client) GetSeasonAggregateCredits(tvID, seasonNumber int) (*AggregateCr
 
 func (c *Client) GetPersonTVCredits(personID int) (*PersonCreditsResponse, error) {
 	var result PersonCreditsResponse
-	endpoint := fmt.Sprintf("/person/%d/tv_credits", personID) // focus on TV credits as per prompt context, or combined_credits
-	// Actually prompt says "other shows they have written for", implying TV. Let's stick to TV credits for now or combined if movies matter. Let's start with TV.
+	endpoint := fmt.Sprintf("/person/%d/tv_credits", personID)
 	err := c.doRequest("GET", endpoint, nil, &result)
 	return &result, err
 }
@@ -239,11 +230,6 @@ func (c *Client) GetCreditDetails(creditID string) (*CreditDetails, error) {
 func (c *Client) GetEpisodeDetails(tvID, seasonNumber, episodeNumber int) (*Episode, error) {
 	var result Episode
 	endpoint := fmt.Sprintf("/tv/%d/season/%d/episode/%d", tvID, seasonNumber, episodeNumber)
-	params := url.Values{}
-	params.Add("append_to_response", "credits") // credits might be default but let's be safe or check docs
-	// Actually for /episode/{num}, the credits are usually in "crew" and "guest_stars" fields directly.
-	// But let's check if we need append_to_response=credits.
-	// Standard response includes crew/guest_stars.
 	err := c.doRequest("GET", endpoint, nil, &result)
 	return &result, err
 }
