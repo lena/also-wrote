@@ -6,7 +6,6 @@ A simple Go application to discover the writers behind your favorite TV shows us
 
 <a href="https://also-wrote.onrender.com" target="_blank" rel="noopener noreferrer">https://also-wrote.onrender.com</a>
 <br>
-Please be patient. It might take a minute to load. ⏳
 
 ## Features
 

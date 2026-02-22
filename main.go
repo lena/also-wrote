@@ -62,6 +62,14 @@ func main() {
 	http.HandleFunc("/person", handlePerson)
 	http.HandleFunc("/episode", handleEpisode)
 
+	// Serve static files (favicon)
+	fs := http.FileServer(http.Dir("static"))
+	http.Handle("/static/", http.StripPrefix("/static/", fs))
+	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/svg+xml")
+		http.ServeFile(w, r, "static/favicon.svg")
+	})
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -394,7 +402,7 @@ func handleEpisode(w http.ResponseWriter, r *http.Request) {
 	var writingStaff []tmdb.AggregateCredit
 	if err == nil {
 		for _, credit := range seasonCredits.Crew {
-			if credit.Department == "Writing" {
+			if credit.Department == "Writing" && credit.ID > 0 { // Filter out credits with ID 0
 				writingStaff = append(writingStaff, credit)
 			}
 		}

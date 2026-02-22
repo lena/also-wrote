@@ -54,7 +54,7 @@
                             <div class="flex flex-wrap gap-2 items-center">
                                 <span class="text-xs font-bold text-gray-400 uppercase tracking-wider mr-1">Written by</span>
                                 {{range .Crew}}
-                                    {{if or (eq .Job "Writer") (eq .Job "Screenplay") (eq .Job "Teleplay") (eq .Job "Story")}}
+                                    {{if and (gt .ID 0) (or (eq .Job "Writer") (eq .Job "Screenplay") (eq .Job "Teleplay") (eq .Job "Story"))}}
                                     <a href="/person?id={{.ID}}" class="inline-flex items-center px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full hover:bg-indigo-100 hover:text-indigo-800 transition border border-indigo-100">
                                         {{.Name}}
                                         {{if ne .Job "Writer"}}
