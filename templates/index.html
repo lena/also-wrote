@@ -19,8 +19,10 @@
 
         <div class="w-full max-w-2xl mb-16">
             <form action="/search" method="GET" class="relative group">
-                <input type="text" name="q" placeholder="Search for a show or writer (e.g., The Wire)..."
-                    class="w-full p-6 pl-8 text-xl text-slate-900 bg-white/95 backdrop-blur-sm border-0 rounded-full shadow-2xl focus:ring-4 focus:ring-indigo-500/50 transition duration-300 placeholder-slate-400 outline-none">
+                <input type="text" name="q" id="hero-search" placeholder="Search for a show or writer (e.g., The Wire)..."
+                    class="hero-search-input w-full p-6 pl-8 text-xl text-slate-900 bg-white/95 backdrop-blur-sm border-0 rounded-full shadow-2xl focus:ring-4 focus:ring-indigo-500/50 transition duration-300 placeholder-slate-400 outline-none"
+                    data-placeholder-short="Search for a show or writer"
+                    data-placeholder-long="Search for a show or writer (e.g., The Wire)...">
                 <button type="submit" class="absolute right-3 top-2 bottom-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full px-8 font-bold transition duration-300 flex items-center justify-center">
                     Search
                 </button>
