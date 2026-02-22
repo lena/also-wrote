@@ -1,6 +1,7 @@
 package main
 
 import (
+	"also-wrote/internal/tmdb"
 	"bufio"
 	"fmt"
 	"html/template"
@@ -11,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"writer-fan/internal/tmdb"
 )
 
 var tmdbClient *tmdb.Client

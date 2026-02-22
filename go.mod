@@ -1,3 +1,3 @@
-module writer-fan
+module also-wrote
 
 go 1.24.4
