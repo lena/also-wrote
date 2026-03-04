@@ -10,9 +10,12 @@ A simple Go application to discover the writers behind your favorite TV shows us
 ## Features
 
 - **Search by Show**: Find TV series by title.
+- **Search by Writer**: Find TV writers by name.
 - **Episode Details**: Browse all episodes organized by season, with full writing staff lists.
 - **Writer Credits**: Identify writers for each episode.
 - **Writer Profiles**: Click on a writer to see their other works and specific credited episodes.
+- **Sign in with Magic Link**: Enter your email to receive a one-time sign-in link (no password).
+- **Favorite Writers**: Save your favorite writers.
 
 ## Screenshots
 
@@ -33,17 +36,23 @@ A simple Go application to discover the writers behind your favorite TV shows us
 ## Setup
 
 1.  **Clone the repository** (if you haven't already).
-2.  **Create .env file**:
-    Copy `.env.example` to `.env` and add your [TMDB API Token](https://www.themoviedb.org/settings/api).
+2.  **PostgreSQL**: Create a local database for development:
+    ```bash
+    createdb also_wrote
+    ```
+3.  **Create .env file**:
+    Copy `.env.example` to `.env` and add your [TMDB API Token](https://www.themoviedb.org/settings/api) and your username to the `DATABASE_URL`.
+    Optionally set SMTP vars if you want magic-link emails sent instead of printed in the server log.
     ```bash
     cp .env.example .env
     ```
-3.  **Run the application**:
+4.  **Run the application**:
     ```bash
     go run main.go
     ```
-4.  **Open your browser**:
-    Visit [http://localhost:8080](http://localhost:8080)
+5.  **Open your browser**:
+    Visit [http://localhost:8080](http://localhost:8080). 
+    Without SMTP configured, magic links are printed in the server log when you request a sign-in email.
 
 ## Project Structure
 

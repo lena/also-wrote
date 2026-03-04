@@ -1,8 +1,12 @@
 package main
 
 import (
+	"also-wrote/internal/auth"
+	"also-wrote/internal/db"
+	"also-wrote/internal/mailer"
 	"also-wrote/internal/tmdb"
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -13,21 +17,29 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 var tmdbClient *tmdb.Client
 var templates *template.Template
+var database *db.DB
 
 func init() {
 	loadEnv()
+	conn := os.Getenv("DATABASE_URL")
+	if conn == "" {
+		conn = "postgres://localhost/also_wrote?sslmode=disable"
+	}
+	var err error
+	database, err = db.Open(conn)
+	if err != nil {
+		log.Fatalf("Database: %v (set DATABASE_URL for production)", err)
+	}
 	token := os.Getenv("TMDB_API_TOKEN")
 	if token == "" {
 		log.Println("Warning: TMDB_API_TOKEN environment variable is not set")
 	}
 	tmdbClient = tmdb.NewClient(token)
-	// Declare error type explicitly because using assignment on next line
-	// to update the the *package-level* templates variable
-	var err error
 	templates, err = template.ParseGlob("templates/*.html")
 	if err != nil {
 		log.Fatal(err)
@@ -54,6 +66,26 @@ func loadEnv() {
 	}
 }
 
+func getCurrentUser(r *http.Request) *db.User {
+	c, err := r.Cookie(auth.CookieName)
+	if err != nil || c.Value == "" {
+		return nil
+	}
+	secret := auth.Secret()
+	if secret == "" {
+		return nil
+	}
+	userID, _ := auth.VerifyCookie(c.Value, secret)
+	if userID == 0 {
+		return nil
+	}
+	u, err := database.UserByID(userID)
+	if err != nil || u == nil {
+		return nil
+	}
+	return u
+}
+
 func main() {
 	// Order doesn't matter because longest path match is used
 	http.HandleFunc("/", handleHome)
@@ -61,6 +93,13 @@ func main() {
 	http.HandleFunc("/show", handleShow)
 	http.HandleFunc("/person", handlePerson)
 	http.HandleFunc("/episode", handleEpisode)
+	// Auth & Favorite Writers
+	http.HandleFunc("/login", handleLogin)
+	http.HandleFunc("/auth/verify", handleAuthVerify)
+	http.HandleFunc("/logout", handleLogout)
+	http.HandleFunc("/favorite-writers", handleFavoriteWriters)
+	http.HandleFunc("/api/favorite-writers", handleFavoriteWritersAPI)
+	http.HandleFunc("/api/favorite-writers/", handleFavoriteWritersAPIDelete)
 
 	// Serve static files (favicon)
 	fs := http.FileServer(http.Dir("static"))
@@ -82,9 +121,10 @@ func main() {
 func handleHome(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		w.WriteHeader(http.StatusNotFound)
-		renderTemplate(w, "404.html", nil)
+		renderTemplate(w, "404.html", map[string]interface{}{"User": getCurrentUser(r)})
 		return
 	}
+	user := getCurrentUser(r)
 
 	// Pick 3 random titles from the list, then fetch their data in parallel using goroutines
 	allSuggestedTitles := []string{
@@ -133,13 +173,15 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	wg.Wait()
 
 	renderTemplate(w, "index.html", map[string]interface{}{
+		"User":           user,
 		"SuggestedShows": suggestedShows,
 	})
 }
 
-func renderError(w http.ResponseWriter, title, message string, status int) {
+func renderError(w http.ResponseWriter, r *http.Request, title, message string, status int) {
 	w.WriteHeader(status)
 	renderTemplate(w, "404.html", map[string]interface{}{
+		"User":         getCurrentUser(r),
 		"ErrorTitle":   title,
 		"ErrorMessage": message,
 	})
@@ -157,7 +199,7 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 	// First, search TV shows
 	results, err := tmdbClient.SearchTVShows(query)
 	if err != nil {
-		renderError(w, "Search Error", "Error searching shows: "+err.Error(), http.StatusInternalServerError)
+		renderError(w, r, "Search Error", "Error searching shows: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -180,6 +222,7 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		renderTemplate(w, "search_results.html", map[string]interface{}{
+			"User":    getCurrentUser(r),
 			"Query":   query,
 			"Results": results,
 		})
@@ -189,7 +232,7 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 	// If no TV shows are found, search writers
 	people, err := tmdbClient.SearchPeople(query)
 	if err != nil {
-		renderError(w, "Search Error", "Error searching people: "+err.Error(), http.StatusInternalServerError)
+		renderError(w, r, "Search Error", "Error searching people: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
@@ -215,26 +258,30 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		renderTemplate(w, "search_results_people.html", map[string]interface{}{
+			"User":    getCurrentUser(r),
 			"Query":   query,
 			"Results": peopleResults,
 		})
 		return
 	}
 
-	renderTemplate(w, "no_results.html", query)
+	renderTemplate(w, "no_results.html", map[string]interface{}{
+		"User":  getCurrentUser(r),
+		"Query": query,
+	})
 }
 
 func handleShow(w http.ResponseWriter, r *http.Request) {
 	idStr := r.URL.Query().Get("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		renderError(w, "Invalid Show", "The show ID provided is invalid.", http.StatusBadRequest)
+		renderError(w, r, "Invalid Show", "The show ID provided is invalid.", http.StatusBadRequest)
 		return
 	}
 
 	showDetails, err := tmdbClient.GetTVShowDetails(id)
 	if err != nil {
-		renderError(w, "Show Not Found", "We couldn't find details for this show. It may not exist or there was a problem fetching the data.", http.StatusNotFound)
+		renderError(w, r, "Show Not Found", "We couldn't find details for this show. It may not exist or there was a problem fetching the data.", http.StatusNotFound)
 		return
 	}
 
@@ -278,6 +325,7 @@ func handleShow(w http.ResponseWriter, r *http.Request) {
 	})
 
 	renderTemplate(w, "show_details.html", map[string]interface{}{
+		"User":    getCurrentUser(r),
 		"Show":    showDetails,
 		"Seasons": allSeasons,
 	})
@@ -287,19 +335,19 @@ func handlePerson(w http.ResponseWriter, r *http.Request) {
 	idStr := r.URL.Query().Get("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		renderError(w, "Invalid Person", "The person ID provided is invalid.", http.StatusBadRequest)
+		renderError(w, r, "Invalid Person", "The person ID provided is invalid.", http.StatusBadRequest)
 		return
 	}
 
 	person, err := tmdbClient.GetPersonDetails(id)
 	if err != nil {
-		renderError(w, "Person Not Found", "We couldn't find details for this person.", http.StatusNotFound)
+		renderError(w, r, "Person Not Found", "We couldn't find details for this person.", http.StatusNotFound)
 		return
 	}
 
 	credits, err := tmdbClient.GetPersonTVCredits(id)
 	if err != nil {
-		renderError(w, "Credits Not Found", "We couldn't fetch credits for this person.", http.StatusInternalServerError)
+		renderError(w, r, "Credits Not Found", "We couldn't fetch credits for this person.", http.StatusInternalServerError)
 		return
 	}
 
@@ -353,9 +401,16 @@ func handlePerson(w http.ResponseWriter, r *http.Request) {
 		return writingCredits[i].FirstAirDate > writingCredits[j].FirstAirDate
 	})
 
+	user := getCurrentUser(r)
+	var isFavorited bool
+	if user != nil {
+		isFavorited, _ = database.IsFavoriteWriter(user.ID, id)
+	}
 	renderTemplate(w, "person_details.html", map[string]interface{}{
+		"User":    user,
 		"Person":  person,
 		"Credits": writingCredits,
+		"IsFavorited": isFavorited,
 	})
 }
 
@@ -373,23 +428,23 @@ func handleEpisode(w http.ResponseWriter, r *http.Request) {
 
 	showID, err := strconv.Atoi(showIDStr)
 	if err != nil {
-		renderError(w, "Invalid Show ID", "The show ID provided is invalid.", http.StatusBadRequest)
+		renderError(w, r, "Invalid Show ID", "The show ID provided is invalid.", http.StatusBadRequest)
 		return
 	}
 	seasonNum, err := strconv.Atoi(seasonNumStr)
 	if err != nil {
-		renderError(w, "Invalid Season Number", "The season number provided is invalid.", http.StatusBadRequest)
+		renderError(w, r, "Invalid Season Number", "The season number provided is invalid.", http.StatusBadRequest)
 		return
 	}
 	episodeNum, err := strconv.Atoi(episodeNumStr)
 	if err != nil {
-		renderError(w, "Invalid Episode Number", "The episode number provided is invalid.", http.StatusBadRequest)
+		renderError(w, r, "Invalid Episode Number", "The episode number provided is invalid.", http.StatusBadRequest)
 		return
 	}
 
 	episode, err := tmdbClient.GetEpisodeDetails(showID, seasonNum, episodeNum)
 	if err != nil {
-		renderError(w, "Episode Not Found", "We couldn't find details for this episode.", http.StatusNotFound)
+		renderError(w, r, "Episode Not Found", "We couldn't find details for this episode.", http.StatusNotFound)
 		return
 	}
 
@@ -410,9 +465,198 @@ func handleEpisode(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error fetching season credits: %v", err)
 	}
 
+	user := getCurrentUser(r)
 	renderTemplate(w, "episode_details.html", map[string]interface{}{
+		"User":         user,
 		"Episode":      episode,
 		"Show":         show,
 		"WritingStaff": writingStaff,
 	})
+}
+
+// --- Auth & Favorite Writers ---
+
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	user := getCurrentUser(r)
+	if user != nil {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	if r.Method == http.MethodPost {
+		r.ParseForm()
+		email := strings.TrimSpace(r.Form.Get("email"))
+		if email == "" {
+			renderTemplate(w, "login.html", map[string]interface{}{
+				"User":  nil,
+				"Error": "Please enter your email.",
+			})
+			return
+		}
+		raw, tokenHash, err := auth.NewMagicLinkToken()
+		if err != nil {
+			renderError(w, r, "Error", "Could not create sign-in link.", http.StatusInternalServerError)
+			return
+		}
+		expiresAt := time.Now().Add(auth.TokenExpiry)
+		if err := database.SaveMagicLinkToken(tokenHash, email, expiresAt); err != nil {
+			log.Printf("SaveMagicLinkToken: %v", err)
+			renderError(w, r, "Error", "Could not create sign-in link.", http.StatusInternalServerError)
+			return
+		}
+		baseURL := os.Getenv("APP_URL")
+		if baseURL == "" {
+			baseURL = "http://localhost:8080"
+		}
+		link := mailer.MagicLinkURL(baseURL, auth.RawTokenToURLParam(raw))
+		if err := mailer.SendMagicLink(email, link); err != nil {
+			log.Printf("SendMagicLink: %v", err)
+			renderError(w, r, "Error", "Could not send email. Try again or check server logs for the link.", http.StatusInternalServerError)
+			return
+		}
+		renderTemplate(w, "check_email.html", map[string]interface{}{
+			"User":  nil,
+			"Email": email,
+		})
+		return
+	}
+	errMsg := r.URL.Query().Get("error")
+	var errInterface interface{}
+	if errMsg != "" {
+		switch errMsg {
+		case "missing", "invalid":
+			errInterface = "Invalid or missing sign-in link. Request a new one below."
+		case "expired":
+			errInterface = "That link has expired. Request a new one below."
+		default:
+			errInterface = "Something went wrong. Please try again."
+		}
+	}
+	renderTemplate(w, "login.html", map[string]interface{}{
+		"User":  nil,
+		"Error": errInterface,
+	})
+}
+
+func handleAuthVerify(w http.ResponseWriter, r *http.Request) {
+	tokenParam := r.URL.Query().Get("token")
+	if tokenParam == "" {
+		http.Redirect(w, r, "/login?error=missing", http.StatusFound)
+		return
+	}
+	raw, err := auth.URLParamToRaw(tokenParam)
+	if err != nil {
+		http.Redirect(w, r, "/login?error=invalid", http.StatusFound)
+		return
+	}
+	tokenHash := auth.TokenHash(raw)
+	email, err := database.ConsumeMagicLinkToken(tokenHash)
+	if err != nil || email == "" {
+		http.Redirect(w, r, "/login?error=expired", http.StatusFound)
+		return
+	}
+	user, err := database.GetOrCreateUser(email)
+	if err != nil {
+		log.Printf("GetOrCreateUser: %v", err)
+		http.Redirect(w, r, "/login?error=server", http.StatusFound)
+		return
+	}
+	secret := auth.Secret()
+	if secret == "" {
+		log.Println("SESSION_SECRET not set; session will not be stored")
+	} else {
+		auth.SetSession(w, user, secret)
+	}
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func handleLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	auth.ClearSession(w)
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+func handleFavoriteWriters(w http.ResponseWriter, r *http.Request) {
+	user := getCurrentUser(r)
+	if user == nil {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	personIDs, err := database.FavoriteWriterPersonIDs(user.ID)
+	if err != nil {
+		renderError(w, r, "Error", "Could not load your favorite writers.", http.StatusInternalServerError)
+		return
+	}
+	var writers []*tmdb.Person
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	for _, id := range personIDs {
+		wg.Add(1)
+		go func(pid int) {
+			defer wg.Done()
+			p, err := tmdbClient.GetPersonDetails(pid)
+			if err == nil && p != nil {
+				mu.Lock()
+				writers = append(writers, p)
+				mu.Unlock()
+			}
+		}(id)
+	}
+	wg.Wait()
+	renderTemplate(w, "favorite_writers.html", map[string]interface{}{
+		"User":    user,
+		"Writers": writers,
+	})
+}
+
+func handleFavoriteWritersAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := getCurrentUser(r)
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var body struct {
+		PersonID int `json:"person_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.PersonID == 0 {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if err := database.AddFavoriteWriter(user.ID, body.PersonID); err != nil {
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+}
+
+func handleFavoriteWritersAPIDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := getCurrentUser(r)
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	path := strings.TrimPrefix(r.URL.Path, "/api/favorite-writers/")
+	personID, err := strconv.Atoi(strings.Trim(path, "/"))
+	if err != nil || personID <= 0 {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if err := database.RemoveFavoriteWriter(user.ID, personID); err != nil {
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
 }

@@ -1,0 +1,25 @@
+# Render Blueprint: deploy from Dashboard → New → Blueprint, or connect repo and use these values manually.
+
+databases:
+  - name: also-wrote-db
+    databaseName: also_wrote
+    plan: free
+
+services:
+  - type: web
+    name: also-wrote
+    runtime: go
+    buildCommand: go build -o server .
+    startCommand: ./server
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: also-wrote-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: TMDB_API_TOKEN
+        sync: false
+      - key: APP_URL
+        sync: false
+        
