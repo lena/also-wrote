@@ -131,7 +131,7 @@ func main() {
 func handleHome(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		w.WriteHeader(http.StatusNotFound)
-		renderTemplate(w, "404.html", map[string]interface{}{"User": getCurrentUser(r)})
+		renderTemplate(w, r, "404.html", nil)
 		return
 	}
 	user := getCurrentUser(r)
@@ -182,7 +182,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 	}
 	wg.Wait()
 
-	renderTemplate(w, "index.html", map[string]interface{}{
+	renderTemplate(w, r, "index.html", map[string]interface{}{
 		"User":           user,
 		"SuggestedShows": suggestedShows,
 	})
@@ -190,8 +190,7 @@ func handleHome(w http.ResponseWriter, r *http.Request) {
 
 func renderError(w http.ResponseWriter, r *http.Request, title, message string, status int) {
 	w.WriteHeader(status)
-	renderTemplate(w, "404.html", map[string]interface{}{
-		"User":         getCurrentUser(r),
+	renderTemplate(w, r, "404.html", map[string]interface{}{
 		"ErrorTitle":   title,
 		"ErrorMessage": message,
 	})
@@ -231,8 +230,7 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, fmt.Sprintf("/show?id=%d", results[0].ID), http.StatusFound)
 			return
 		}
-		renderTemplate(w, "search_results.html", map[string]interface{}{
-			"User":    getCurrentUser(r),
+		renderTemplate(w, r, "search_results.html", map[string]interface{}{
 			"Query":   query,
 			"Results": results,
 		})
@@ -267,16 +265,14 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, fmt.Sprintf("/person?id=%d", peopleResults[0].ID), http.StatusFound)
 			return
 		}
-		renderTemplate(w, "search_results_people.html", map[string]interface{}{
-			"User":    getCurrentUser(r),
+		renderTemplate(w, r, "search_results_people.html", map[string]interface{}{
 			"Query":   query,
 			"Results": peopleResults,
 		})
 		return
 	}
 
-	renderTemplate(w, "no_results.html", map[string]interface{}{
-		"User":  getCurrentUser(r),
+	renderTemplate(w, r, "no_results.html", map[string]interface{}{
 		"Query": query,
 	})
 }
@@ -334,8 +330,7 @@ func handleShow(w http.ResponseWriter, r *http.Request) {
 		return allSeasons[i].SeasonNumber < allSeasons[j].SeasonNumber
 	})
 
-	renderTemplate(w, "show_details.html", map[string]interface{}{
-		"User":    getCurrentUser(r),
+	renderTemplate(w, r, "show_details.html", map[string]interface{}{
 		"Show":    showDetails,
 		"Seasons": allSeasons,
 	})
@@ -416,15 +411,37 @@ func handlePerson(w http.ResponseWriter, r *http.Request) {
 	if user != nil {
 		isFavorited, _ = database.IsFavoriteWriter(user.ID, id)
 	}
-	renderTemplate(w, "person_details.html", map[string]interface{}{
-		"User":    user,
-		"Person":  person,
-		"Credits": writingCredits,
-		"IsFavorited": isFavorited,
+	renderTemplate(w, r, "person_details.html", map[string]interface{}{
+		"User":         user,
+		"Person":       person,
+		"Credits":      writingCredits,
+		"IsFavorited":  isFavorited,
 	})
 }
 
-func renderTemplate(w http.ResponseWriter, tmpl string, data interface{}) {
+func getOrCreateCSRFToken(w http.ResponseWriter, r *http.Request) string {
+	token := auth.TokenFromRequest(r)
+	if auth.ValidToken(token) {
+		return token
+	}
+	token, err := auth.GenerateToken()
+	if err != nil {
+		return ""
+	}
+	auth.SetCookie(w, token)
+	return token
+}
+
+func renderTemplate(w http.ResponseWriter, r *http.Request, tmpl string, data map[string]interface{}) {
+	if data == nil {
+		data = make(map[string]interface{})
+	}
+	if _, ok := data["User"]; !ok {
+		data["User"] = getCurrentUser(r)
+	}
+	if _, ok := data["CsrfToken"]; !ok {
+		data["CsrfToken"] = getOrCreateCSRFToken(w, r)
+	}
 	err := templates.ExecuteTemplate(w, tmpl, data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -476,7 +493,7 @@ func handleEpisode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := getCurrentUser(r)
-	renderTemplate(w, "episode_details.html", map[string]interface{}{
+	renderTemplate(w, r, "episode_details.html", map[string]interface{}{
 		"User":         user,
 		"Episode":      episode,
 		"Show":         show,
@@ -498,23 +515,30 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
 			return
 		}
+		if !auth.VerifyCSRF(r, r.Form.Get("csrf_token")) {
+			renderTemplate(w, r, "login.html", map[string]interface{}{
+				"User":  nil,
+				"Error": "Invalid request. Please try again.",
+			})
+			return
+		}
 		email := strings.TrimSpace(r.Form.Get("email"))
 		if email == "" {
-			renderTemplate(w, "login.html", map[string]interface{}{
+			renderTemplate(w, r, "login.html", map[string]interface{}{
 				"User":  nil,
 				"Error": "Please enter your email.",
 			})
 			return
 		}
 		if len(email) > 254 {
-			renderTemplate(w, "login.html", map[string]interface{}{
+			renderTemplate(w, r, "login.html", map[string]interface{}{
 				"User":  nil,
 				"Error": "Please enter a valid email address.",
 			})
 			return
 		}
 		if _, err := mail.ParseAddress(email); err != nil {
-			renderTemplate(w, "login.html", map[string]interface{}{
+			renderTemplate(w, r, "login.html", map[string]interface{}{
 				"User":  nil,
 				"Error": "Please enter a valid email address.",
 			})
@@ -541,7 +565,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 			renderError(w, r, "Error", "Could not send email. Try again or check server logs for the link.", http.StatusInternalServerError)
 			return
 		}
-		renderTemplate(w, "check_email.html", map[string]interface{}{
+		renderTemplate(w, r, "check_email.html", map[string]interface{}{
 			"User":  nil,
 			"Email": email,
 		})
@@ -559,7 +583,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 			errInterface = "Something went wrong. Please try again."
 		}
 	}
-	renderTemplate(w, "login.html", map[string]interface{}{
+	renderTemplate(w, r, "login.html", map[string]interface{}{
 		"User":  nil,
 		"Error": errInterface,
 	})
@@ -602,6 +626,14 @@ func handleLogout(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusFound)
 		return
 	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	if !auth.VerifyCSRF(r, r.Form.Get("csrf_token")) {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
 	auth.ClearSession(w)
 	http.Redirect(w, r, "/", http.StatusFound)
 }
@@ -633,7 +665,7 @@ func handleFavoriteWriters(w http.ResponseWriter, r *http.Request) {
 		}(id)
 	}
 	wg.Wait()
-	renderTemplate(w, "favorite_writers.html", map[string]interface{}{
+	renderTemplate(w, r, "favorite_writers.html", map[string]interface{}{
 		"User":    user,
 		"Writers": writers,
 	})
@@ -642,6 +674,10 @@ func handleFavoriteWriters(w http.ResponseWriter, r *http.Request) {
 func handleFavoriteWritersAPI(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !auth.VerifyCSRF(r, r.Header.Get("X-CSRF-Token")) {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 	user := getCurrentUser(r)
@@ -669,6 +705,10 @@ func handleFavoriteWritersAPI(w http.ResponseWriter, r *http.Request) {
 func handleFavoriteWritersAPIDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !auth.VerifyCSRF(r, r.Header.Get("X-CSRF-Token")) {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 	user := getCurrentUser(r)
