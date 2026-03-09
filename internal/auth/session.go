@@ -79,8 +79,17 @@ func SetSession(w http.ResponseWriter, user *db.User, secret string) {
 		MaxAge:   MaxAgeSecs,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   getEnv("APP_ENV", "development") == "production",
+		Secure:   isProduction(),
 	})
+}
+
+// isProduction returns true when the app is served over HTTPS (cookie should be Secure).
+func isProduction() bool {
+	if getEnv("APP_ENV", "") == "production" {
+		return true
+	}
+	appURL := getEnv("APP_URL", "")
+	return strings.HasPrefix(strings.ToLower(appURL), "https://")
 }
 
 // ClearSession removes the session cookie.
@@ -92,6 +101,7 @@ func ClearSession(w http.ResponseWriter) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
+		Secure:   isProduction(),
 	})
 }
 
