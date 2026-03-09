@@ -13,6 +13,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/mail"
 	"os"
 	"sort"
 	"strconv"
@@ -30,6 +31,8 @@ var (
 	loginLimiter   = ratelimit.NewLimiter(5, 15*time.Minute)
 	generalLimiter = ratelimit.NewLimiter(60, time.Minute)
 )
+
+const maxRequestBodyBytes = 1 << 20 // 1 MB — cap request bodies to avoid DoS
 
 func init() {
 	loadEnv()
@@ -490,12 +493,30 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method == http.MethodPost {
-		r.ParseForm()
+		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		email := strings.TrimSpace(r.Form.Get("email"))
 		if email == "" {
 			renderTemplate(w, "login.html", map[string]interface{}{
 				"User":  nil,
 				"Error": "Please enter your email.",
+			})
+			return
+		}
+		if len(email) > 254 {
+			renderTemplate(w, "login.html", map[string]interface{}{
+				"User":  nil,
+				"Error": "Please enter a valid email address.",
+			})
+			return
+		}
+		if _, err := mail.ParseAddress(email); err != nil {
+			renderTemplate(w, "login.html", map[string]interface{}{
+				"User":  nil,
+				"Error": "Please enter a valid email address.",
 			})
 			return
 		}
@@ -628,6 +649,7 @@ func handleFavoriteWritersAPI(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 	var body struct {
 		PersonID int `json:"person_id"`
 	}
