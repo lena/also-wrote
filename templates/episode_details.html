@@ -26,9 +26,10 @@
             <p class="text-slate-400 mb-6">Aired on {{.Episode.AirDate}}</p>
             <p class="text-lg text-slate-300 leading-relaxed mb-8">{{.Episode.Overview}}</p>
             
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden p-6 md:p-8">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div>
-                    <h3 class="text-lg font-bold text-gray-900 mb-4 border-b pb-2">Writers</h3>
+                    <h3 class="text-lg font-bold text-gray-900 mb-4 border-b border-gray-100 pb-2">Writers</h3>
                     <div class="space-y-3">
                         {{range .Episode.Crew}}
                             {{if or (eq .Job "Writer") (eq .Job "Screenplay") (eq .Job "Teleplay") (eq .Job "Story")}}
@@ -49,7 +50,7 @@
                 </div>
                 
                 <div>
-                    <h3 class="text-lg font-bold text-gray-900 mb-4 border-b pb-2">Directors</h3>
+                    <h3 class="text-lg font-bold text-gray-900 mb-4 border-b border-gray-100 pb-2">Directors</h3>
                     <div class="space-y-3">
                         {{range .Episode.Crew}}
                             {{if eq .Job "Director"}}
@@ -71,7 +72,7 @@
             </div>
 
              <div class="mt-8">
-                <h3 class="text-lg font-bold text-gray-900 mb-4 border-b pb-2">Season Writing Staff</h3>
+                <h3 class="text-lg font-bold text-gray-900 mb-4 border-b border-gray-100 pb-2">Season Writing Staff</h3>
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {{range .WritingStaff}}
                     <a href="/person?id={{.ID}}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition group">
@@ -90,7 +91,7 @@
                     {{end}}
                 </div>
              </div>
-             
+            </div>
 
         </div>
     </div>

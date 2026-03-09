@@ -50,7 +50,28 @@ func init() {
 		log.Println("Warning: TMDB_API_TOKEN environment variable is not set")
 	}
 	tmdbClient = tmdb.NewClient(token)
-	templates, err = template.ParseGlob("templates/*.html")
+	funcMap := template.FuncMap{
+		"initial": func(s string) string {
+			s = strings.TrimSpace(s)
+			if s == "" {
+				return "?"
+			}
+			r := []rune(s)
+			return strings.ToUpper(string(r[0:1]))
+		},
+		"avatarColor": func(s string) string {
+			colors := []string{"bg-indigo-500", "bg-violet-500", "bg-purple-500", "bg-fuchsia-500", "bg-pink-500", "bg-rose-500", "bg-sky-500", "bg-blue-500"}
+			h := 0
+			for _, c := range s {
+				h += int(c)
+			}
+			if h < 0 {
+				h = -h
+			}
+			return colors[h%len(colors)]
+		},
+	}
+	templates, err = template.New("").Funcs(funcMap).ParseGlob("templates/*.html")
 	if err != nil {
 		log.Fatal(err)
 	}

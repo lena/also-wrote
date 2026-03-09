@@ -67,17 +67,17 @@
             </form>
             {{if .User}}
             <div class="relative group">
-                <button type="button" class="flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-lg hover:bg-gray-100 text-gray-700 text-sm font-medium">
-                    <span class="max-w-[120px] truncate">{{.User.Email}}</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400 group-hover:rotate-180 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <button type="button" class="flex items-center gap-1.5 pl-1 pr-2 py-1.5 rounded-full hover:bg-gray-100 text-gray-700 transition">
+                    <span class="flex items-center justify-center w-8 h-8 rounded-full text-white font-semibold text-sm shrink-0 {{avatarColor .User.Email}}">{{initial .User.Email}}</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400 group-hover:rotate-180 transition-transform shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                     </svg>
                 </button>
-                <div class="absolute right-0 top-full mt-1 py-1 w-48 bg-white rounded-lg shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                <div class="absolute right-0 top-full mt-1 py-1 min-w-[12rem] max-w-[20rem] bg-white rounded-lg shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
                     <a href="/favorite-writers" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-indigo-600">Favorite Writers</a>
                     <form action="/logout" method="POST" class="border-t border-gray-100">
                         <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
-                        <button type="submit" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-red-600">Log out</button>
+                        <button type="submit" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-red-600">Log out <span class="text-gray-500 font-normal">({{.User.Email}})</span></button>
                     </form>
                 </div>
             </div>
