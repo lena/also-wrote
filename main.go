@@ -4,6 +4,7 @@ import (
 	"also-wrote/internal/auth"
 	"also-wrote/internal/db"
 	"also-wrote/internal/mailer"
+	"also-wrote/internal/ratelimit"
 	"also-wrote/internal/tmdb"
 	"bufio"
 	"encoding/json"
@@ -23,6 +24,12 @@ import (
 var tmdbClient *tmdb.Client
 var templates *template.Template
 var database *db.DB
+
+// Rate limiters: login is strict (5 per 15 min), TMDB/API are moderate (60 per min)
+var (
+	loginLimiter   = ratelimit.NewLimiter(5, 15*time.Minute)
+	generalLimiter = ratelimit.NewLimiter(60, time.Minute)
+)
 
 func init() {
 	loadEnv()
@@ -89,17 +96,17 @@ func getCurrentUser(r *http.Request) *db.User {
 func main() {
 	// Order doesn't matter because longest path match is used
 	http.HandleFunc("/", handleHome)
-	http.HandleFunc("/search", handleSearch)
-	http.HandleFunc("/show", handleShow)
-	http.HandleFunc("/person", handlePerson)
-	http.HandleFunc("/episode", handleEpisode)
-	// Auth & Favorite Writers
-	http.HandleFunc("/login", handleLogin)
+	http.HandleFunc("/search", ratelimit.Middleware(generalLimiter, handleSearch))
+	http.HandleFunc("/show", ratelimit.Middleware(generalLimiter, handleShow))
+	http.HandleFunc("/person", ratelimit.Middleware(generalLimiter, handlePerson))
+	http.HandleFunc("/episode", ratelimit.Middleware(generalLimiter, handleEpisode))
+	// Auth & Favorite Writers (login: strict limit on POST only)
+	http.HandleFunc("/login", ratelimit.MiddlewarePost(loginLimiter, handleLogin))
 	http.HandleFunc("/auth/verify", handleAuthVerify)
 	http.HandleFunc("/logout", handleLogout)
-	http.HandleFunc("/favorite-writers", handleFavoriteWriters)
-	http.HandleFunc("/api/favorite-writers", handleFavoriteWritersAPI)
-	http.HandleFunc("/api/favorite-writers/", handleFavoriteWritersAPIDelete)
+	http.HandleFunc("/favorite-writers", ratelimit.Middleware(generalLimiter, handleFavoriteWriters))
+	http.HandleFunc("/api/favorite-writers", ratelimit.Middleware(generalLimiter, handleFavoriteWritersAPI))
+	http.HandleFunc("/api/favorite-writers/", ratelimit.Middleware(generalLimiter, handleFavoriteWritersAPIDelete))
 
 	// Serve static files (favicon)
 	fs := http.FileServer(http.Dir("static"))
