@@ -13,8 +13,8 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"net/mail"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,6 +31,9 @@ var (
 	loginLimiter   = ratelimit.NewLimiter(5, 15*time.Minute)
 	generalLimiter = ratelimit.NewLimiter(60, time.Minute)
 )
+
+// emailRegex validates format: local@domain.tld (single dot in domain, TLD 2–6 letters)
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9.!#$%&'*+/=?^_` + "`" + `{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,6}$`)
 
 const maxRequestBodyBytes = 1 << 20 // 1 MB — cap request bodies to avoid DoS
 
@@ -60,7 +63,7 @@ func init() {
 			return strings.ToUpper(string(r[0:1]))
 		},
 		"avatarColor": func(s string) string {
-			colors := []string{"bg-indigo-500", "bg-violet-500", "bg-purple-500", "bg-fuchsia-500", "bg-pink-500", "bg-rose-500", "bg-sky-500", "bg-blue-500"}
+			colors := []string{"bg-purple-500", "bg-fuchsia-500"}
 			h := 0
 			for _, c := range s {
 				h += int(c)
@@ -69,6 +72,16 @@ func init() {
 				h = -h
 			}
 			return colors[h%len(colors)]
+		},
+		"formatDate": func(s string) string {
+			if s == "" {
+				return s
+			}
+			t, err := time.Parse("2006-01-02", s)
+			if err != nil {
+				return s
+			}
+			return t.Format("Jan 2 2006")
 		},
 	}
 	templates, err = template.New("").Funcs(funcMap).ParseGlob("templates/*.html")
@@ -122,7 +135,7 @@ func main() {
 	http.HandleFunc("/", handleHome)
 	http.HandleFunc("/search", ratelimit.Middleware(generalLimiter, handleSearch))
 	http.HandleFunc("/show", ratelimit.Middleware(generalLimiter, handleShow))
-	http.HandleFunc("/person", ratelimit.Middleware(generalLimiter, handlePerson))
+	http.HandleFunc("/writer", ratelimit.Middleware(generalLimiter, handlePerson))
 	http.HandleFunc("/episode", ratelimit.Middleware(generalLimiter, handleEpisode))
 	// Auth & Favorite Writers (login: strict limit on POST only)
 	http.HandleFunc("/login", ratelimit.MiddlewarePost(loginLimiter, handleLogin))
@@ -283,7 +296,7 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	if len(peopleResults) > 0 {
 		if len(peopleResults) == 1 {
-			http.Redirect(w, r, fmt.Sprintf("/person?id=%d", peopleResults[0].ID), http.StatusFound)
+			http.Redirect(w, r, fmt.Sprintf("/writer?id=%d", peopleResults[0].ID), http.StatusFound)
 			return
 		}
 		renderTemplate(w, r, "search_results_people.html", map[string]interface{}{
@@ -558,7 +571,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		if _, err := mail.ParseAddress(email); err != nil {
+		if !emailRegex.MatchString(email) {
 			renderTemplate(w, r, "login.html", map[string]interface{}{
 				"User":  nil,
 				"Error": "Please enter a valid email address.",

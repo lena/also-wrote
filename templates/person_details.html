@@ -17,15 +17,15 @@
         <div class="flex items-center">
             {{if .User}}
             <button type="button" id="heart-btn" data-person-id="{{.Person.ID}}" data-favorited="{{if .IsFavorited}}true{{else}}false{{end}}"
-                class="flex items-center gap-2 px-4 py-2 rounded-full border-2 transition font-semibold text-sm
-                {{if .IsFavorited}}bg-red-50 border-red-200 text-red-600 hover:bg-red-100{{else}}bg-gray-50 border-gray-200 text-gray-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600{{end}}">
-                <span id="heart-icon">{{if .IsFavorited}}❤️{{else}}🩶{{end}}</span>
+                class="flex items-center gap-2 px-4 py-2 rounded-full border-2 transition font-semibold text-sm duration-200
+                {{if .IsFavorited}}bg-violet-50 border-violet-200/80 text-violet-700 hover:bg-violet-100 hover:border-violet-300/90{{else}}bg-gray-50 border-gray-200 text-gray-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600{{end}}">
+                <span id="heart-icon">{{if .IsFavorited}}💜{{else}}🩶{{end}}</span>
                 <span id="heart-label">{{if .IsFavorited}}Favorited{{else}}Add to favorites{{end}}</span>
             </button>
             {{else}}
-            <a href="/login" class="flex items-center gap-2 px-4 py-2 rounded-full border-2 border-gray-200 bg-gray-50 text-gray-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 transition font-semibold text-sm">
-                <span>♡</span>
-                <span>Log in to save this writer to favorites</span>
+            <a href="/login" class="flex items-center gap-2 px-4 py-2 rounded-full border-2 border-gray-200 bg-gray-50 text-gray-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 transition font-semibold text-sm duration-200">
+                <span>🩶</span>
+                <span>Add to favorites</span>
             </a>
             {{end}}
         </div>
@@ -66,7 +66,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
-                    First Aired: {{.FirstAirDate}}
+                    First Aired: {{formatDate .FirstAirDate}}
                 </div>
                 <p class="text-sm text-gray-500 line-clamp-2 mb-4">{{.Overview}}</p>
 
@@ -74,7 +74,7 @@
                 <div class="mt-4 border-t pt-3 flex-grow">
                     <p class="text-xs font-bold text-gray-500 uppercase mb-2">Credited Episodes:</p>
                     <div class="relative max-h-48 episode-list-wrap">
-                        <ul class="space-y-1 max-h-48 episode-list-scroll pr-2">
+                        <ul class="space-y-1 max-h-48 overflow-y-auto episode-list-scroll pr-2">
                             {{range .Episodes}}
                             <li>
                                 <a href="/episode?show_id={{$showID}}&season={{.SeasonNumber}}&episode={{.EpisodeNumber}}" class="text-sm text-gray-700 truncate hover:text-indigo-600 transition flex items-center group/item">
@@ -84,7 +84,8 @@
                             </li>
                             {{end}}
                         </ul>
-                        <div class="episode-fade absolute bottom-0 left-0 right-2 h-8 pointer-events-none bg-gradient-to-t from-white to-transparent" aria-hidden="true"></div>
+                        <div class="episode-fade episode-fade-top absolute top-0 left-0 right-2 h-8 pointer-events-none bg-gradient-to-b from-white to-transparent transition-opacity duration-200" aria-hidden="true"></div>
+                        <div class="episode-fade episode-fade-bottom absolute bottom-0 left-0 right-2 h-8 pointer-events-none bg-gradient-to-t from-white to-transparent transition-opacity duration-200" aria-hidden="true"></div>
                     </div>
                 </div>
                 {{end}}
@@ -120,7 +121,7 @@
                         favorited = false;
                         document.getElementById('heart-icon').textContent = '🩶';
                         document.getElementById('heart-label').textContent = 'Add to favorites';
-                        btn.className = 'flex items-center gap-2 px-4 py-2 rounded-full border-2 transition font-semibold text-sm bg-gray-50 border-gray-200 text-gray-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600';
+                        btn.className = 'flex items-center gap-2 px-4 py-2 rounded-full border-2 transition font-semibold text-sm duration-200 bg-gray-50 border-gray-200 text-gray-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600';
                     }
                 })
                 .finally(function() { btn.disabled = false; });
@@ -134,9 +135,9 @@
                 .then(function(r) {
                     if (r.ok || r.status === 201) {
                         favorited = true;
-                        document.getElementById('heart-icon').textContent = '❤️';
+                        document.getElementById('heart-icon').textContent = '💜';
                         document.getElementById('heart-label').textContent = 'Favorited';
-                        btn.className = 'flex items-center gap-2 px-4 py-2 rounded-full border-2 transition font-semibold text-sm bg-red-50 border-red-200 text-red-600 hover:bg-red-100';
+                        btn.className = 'flex items-center gap-2 px-4 py-2 rounded-full border-2 transition font-semibold text-sm duration-200 bg-violet-50 border-violet-200/80 text-violet-700 hover:bg-violet-100 hover:border-violet-300/90';
                     }
                 })
                 .finally(function() { btn.disabled = false; });

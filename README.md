@@ -30,7 +30,7 @@ A simple Go application to discover the writers behind your favorite TV shows us
   <br><em>Writer Details</em><br><br>
 
   <img src="images/episode_details_page.png" alt="Episode Details" width="500">
-  <br><em>Episode Details</em>
+  <br><em>Episode Details</em><br><br>
 
   <img src="images/favorite_writers_page.png" alt="Favorite Writers" width="500">
   <br><em>Favorite Writers Page (logged in)</em>

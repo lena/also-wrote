@@ -12,7 +12,7 @@
         <div class="flex items-center gap-4 text-gray-300 text-sm md:text-base mb-4">
             <span class="bg-indigo-600 text-white px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider">Series</span>
             <span>{{.Show.NumberOfSeasons}} Seasons</span>
-            <span>Started {{.Show.FirstAirDate}}</span>
+            <span>Started {{formatDate .Show.FirstAirDate}}</span>
         </div>
         <p class="text-gray-200 line-clamp-3 text-lg drop-shadow-sm max-w-3xl">{{.Show.Overview}}</p>
     </div>
@@ -47,7 +47,7 @@
                                         {{.Name}}
                                     </h3>
                                 </a>
-                                <span class="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-1 rounded">{{.AirDate}}</span>
+                                <span class="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-1 rounded">{{formatDate .AirDate}}</span>
                             </div>
                             <p class="text-gray-600 text-sm mb-4 line-clamp-2 leading-relaxed">{{.Overview}}</p>
                             
@@ -55,7 +55,7 @@
                                 <span class="text-xs font-bold text-gray-400 uppercase tracking-wider mr-1">Written by</span>
                                 {{range .Crew}}
                                     {{if and (gt .ID 0) (or (eq .Job "Writer") (eq .Job "Screenplay") (eq .Job "Teleplay") (eq .Job "Story"))}}
-                                    <a href="/person?id={{.ID}}" class="inline-flex items-center px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full hover:bg-indigo-100 hover:text-indigo-800 transition border border-indigo-100">
+                                    <a href="/writer?id={{.ID}}" class="inline-flex items-center px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full hover:bg-indigo-100 hover:text-indigo-800 transition border border-indigo-100">
                                         {{.Name}}
                                         {{if ne .Job "Writer"}}
                                         <span class="ml-1 text-indigo-400 font-normal">({{.Job}})</span>
@@ -78,7 +78,7 @@
             <h3 class="text-lg font-bold mb-4 text-gray-800 border-b pb-2">Show Creators</h3>
             <div class="space-y-4">
                 {{range .Show.CreatedBy}}
-                <a href="/person?id={{.ID}}" class="flex items-center gap-3 group hover:bg-gray-50 p-2 rounded-lg transition -mx-2">
+                <a href="/writer?id={{.ID}}" class="flex items-center gap-3 group hover:bg-gray-50 p-2 rounded-lg transition -mx-2">
                     {{if .ProfilePath}}
                     <img src="https://image.tmdb.org/t/p/w200{{.ProfilePath}}" class="w-12 h-12 rounded-full object-cover shadow-sm group-hover:ring-2 ring-indigo-500 transition">
                     {{else}}
