@@ -63,7 +63,7 @@ func init() {
 			return strings.ToUpper(string(r[0:1]))
 		},
 		"avatarColor": func(s string) string {
-			colors := []string{"bg-indigo-500", "bg-violet-500", "bg-purple-500", "bg-fuchsia-500", "bg-pink-500", "bg-rose-500", "bg-sky-500", "bg-blue-500"}
+			colors := []string{"bg-purple-500", "bg-fuchsia-500"}
 			h := 0
 			for _, c := range s {
 				h += int(c)

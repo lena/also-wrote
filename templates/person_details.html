@@ -17,15 +17,15 @@
         <div class="flex items-center">
             {{if .User}}
             <button type="button" id="heart-btn" data-person-id="{{.Person.ID}}" data-favorited="{{if .IsFavorited}}true{{else}}false{{end}}"
-                class="flex items-center gap-2 px-4 py-2 rounded-full border-2 transition font-semibold text-sm
-                {{if .IsFavorited}}bg-red-50 border-red-200 text-red-600 hover:bg-red-100{{else}}bg-gray-50 border-gray-200 text-gray-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600{{end}}">
-                <span id="heart-icon">{{if .IsFavorited}}❤️{{else}}🩶{{end}}</span>
+                class="flex items-center gap-2 px-4 py-2 rounded-full border-2 transition font-semibold text-sm duration-200
+                {{if .IsFavorited}}bg-violet-50 border-violet-200/80 text-violet-700 hover:bg-violet-100 hover:border-violet-300/90{{else}}bg-gray-50 border-gray-200 text-gray-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600{{end}}">
+                <span id="heart-icon">{{if .IsFavorited}}💜{{else}}🩶{{end}}</span>
                 <span id="heart-label">{{if .IsFavorited}}Favorited{{else}}Add to favorites{{end}}</span>
             </button>
             {{else}}
-            <a href="/login" class="flex items-center gap-2 px-4 py-2 rounded-full border-2 border-gray-200 bg-gray-50 text-gray-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 transition font-semibold text-sm">
-                <span>♡</span>
-                <span>Log in to save this writer to favorites</span>
+            <a href="/login" class="flex items-center gap-2 px-4 py-2 rounded-full border-2 border-gray-200 bg-gray-50 text-gray-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600 transition font-semibold text-sm duration-200">
+                <span>🩶</span>
+                <span>Add to favorites</span>
             </a>
             {{end}}
         </div>
@@ -121,7 +121,7 @@
                         favorited = false;
                         document.getElementById('heart-icon').textContent = '🩶';
                         document.getElementById('heart-label').textContent = 'Add to favorites';
-                        btn.className = 'flex items-center gap-2 px-4 py-2 rounded-full border-2 transition font-semibold text-sm bg-gray-50 border-gray-200 text-gray-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600';
+                        btn.className = 'flex items-center gap-2 px-4 py-2 rounded-full border-2 transition font-semibold text-sm duration-200 bg-gray-50 border-gray-200 text-gray-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600';
                     }
                 })
                 .finally(function() { btn.disabled = false; });
@@ -135,9 +135,9 @@
                 .then(function(r) {
                     if (r.ok || r.status === 201) {
                         favorited = true;
-                        document.getElementById('heart-icon').textContent = '❤️';
+                        document.getElementById('heart-icon').textContent = '💜';
                         document.getElementById('heart-label').textContent = 'Favorited';
-                        btn.className = 'flex items-center gap-2 px-4 py-2 rounded-full border-2 transition font-semibold text-sm bg-red-50 border-red-200 text-red-600 hover:bg-red-100';
+                        btn.className = 'flex items-center gap-2 px-4 py-2 rounded-full border-2 transition font-semibold text-sm duration-200 bg-violet-50 border-violet-200/80 text-violet-700 hover:bg-violet-100 hover:border-violet-300/90';
                     }
                 })
                 .finally(function() { btn.disabled = false; });
