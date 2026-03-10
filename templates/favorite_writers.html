@@ -5,7 +5,7 @@
     {{if .Writers}}
     <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
         {{range .Writers}}
-        <a href="/person?id={{.ID}}" class="group block text-center">
+        <a href="/writer?id={{.ID}}" class="group block text-center">
             <div class="aspect-[2/3] rounded-xl overflow-hidden bg-slate-700 mb-3 shadow-md group-hover:shadow-lg transition">
                 {{if .ProfilePath}}
                 <img src="https://image.tmdb.org/t/p/h632{{.ProfilePath}}" alt="{{.Name}}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">

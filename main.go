@@ -135,7 +135,7 @@ func main() {
 	http.HandleFunc("/", handleHome)
 	http.HandleFunc("/search", ratelimit.Middleware(generalLimiter, handleSearch))
 	http.HandleFunc("/show", ratelimit.Middleware(generalLimiter, handleShow))
-	http.HandleFunc("/person", ratelimit.Middleware(generalLimiter, handlePerson))
+	http.HandleFunc("/writer", ratelimit.Middleware(generalLimiter, handlePerson))
 	http.HandleFunc("/episode", ratelimit.Middleware(generalLimiter, handleEpisode))
 	// Auth & Favorite Writers (login: strict limit on POST only)
 	http.HandleFunc("/login", ratelimit.MiddlewarePost(loginLimiter, handleLogin))
@@ -296,7 +296,7 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	if len(peopleResults) > 0 {
 		if len(peopleResults) == 1 {
-			http.Redirect(w, r, fmt.Sprintf("/person?id=%d", peopleResults[0].ID), http.StatusFound)
+			http.Redirect(w, r, fmt.Sprintf("/writer?id=%d", peopleResults[0].ID), http.StatusFound)
 			return
 		}
 		renderTemplate(w, r, "search_results_people.html", map[string]interface{}{

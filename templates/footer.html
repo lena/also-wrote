@@ -6,12 +6,26 @@
         </div>
     </footer>
     <script>
-        document.querySelectorAll('.episode-list-wrap').forEach(function(wrap) {
-            var list = wrap.querySelector('.episode-list-scroll');
-            if (list && list.scrollHeight > list.clientHeight) {
-                wrap.classList.add('has-overflow');
+        (function() {
+            function updateEpisodeListFades(wrap) {
+                var scrollEl = wrap.querySelector('.episode-list-scroll');
+                var topFade = wrap.querySelector('.episode-fade-top');
+                var bottomFade = wrap.querySelector('.episode-fade-bottom');
+                if (!scrollEl || !topFade || !bottomFade) return;
+                var atTop = scrollEl.scrollTop <= 1;
+                var atBottom = scrollEl.scrollTop + scrollEl.clientHeight >= scrollEl.scrollHeight - 1;
+                topFade.style.opacity = atTop ? '0' : '1';
+                bottomFade.style.opacity = atBottom ? '0' : '1';
             }
-        });
+            document.querySelectorAll('.episode-list-wrap').forEach(function(wrap) {
+                var scrollEl = wrap.querySelector('.episode-list-scroll');
+                if (!scrollEl) return;
+                scrollEl.addEventListener('scroll', function() { updateEpisodeListFades(wrap); });
+                var ro = typeof ResizeObserver !== 'undefined' && new ResizeObserver(function() { updateEpisodeListFades(wrap); });
+                if (ro) ro.observe(scrollEl);
+                updateEpisodeListFades(wrap);
+            });
+        })();
         (function() {
             var el = document.getElementById('hero-search');
             if (!el) return;

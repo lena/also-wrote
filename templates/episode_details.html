@@ -45,7 +45,7 @@
                         <div class="space-y-3">
                             {{range .Episode.Crew}}
                                 {{if or (eq .Job "Writer") (eq .Job "Screenplay") (eq .Job "Teleplay") (eq .Job "Story")}}
-                                <a href="/person?id={{.ID}}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition group -mx-2">
+                                <a href="/writer?id={{.ID}}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition group -mx-2">
                                     {{if .ProfilePath}}
                                     <img src="https://image.tmdb.org/t/p/w200{{.ProfilePath}}" class="w-10 h-10 rounded-full object-cover shadow-sm group-hover:ring-2 ring-indigo-500 transition">
                                     {{else}}
@@ -65,7 +65,7 @@
                         <div class="space-y-3">
                             {{range .Episode.Crew}}
                                 {{if eq .Job "Director"}}
-                                <a href="/person?id={{.ID}}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition group -mx-2">
+                                <a href="/writer?id={{.ID}}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition group -mx-2">
                                     {{if .ProfilePath}}
                                     <img src="https://image.tmdb.org/t/p/w200{{.ProfilePath}}" class="w-10 h-10 rounded-full object-cover shadow-sm group-hover:ring-2 ring-indigo-500 transition">
                                     {{else}}
@@ -92,7 +92,7 @@
             <div class="p-6">
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {{range .WritingStaff}}
-                    <a href="/person?id={{.ID}}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition group -mx-2">
+                    <a href="/writer?id={{.ID}}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition group -mx-2">
                         {{if .ProfilePath}}
                         <img src="https://image.tmdb.org/t/p/w200{{.ProfilePath}}" class="w-10 h-10 rounded-full object-cover shadow-sm group-hover:ring-2 ring-indigo-500 transition">
                         {{else}}

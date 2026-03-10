@@ -74,7 +74,7 @@
                 <div class="mt-4 border-t pt-3 flex-grow">
                     <p class="text-xs font-bold text-gray-500 uppercase mb-2">Credited Episodes:</p>
                     <div class="relative max-h-48 episode-list-wrap">
-                        <ul class="space-y-1 max-h-48 episode-list-scroll pr-2">
+                        <ul class="space-y-1 max-h-48 overflow-y-auto episode-list-scroll pr-2">
                             {{range .Episodes}}
                             <li>
                                 <a href="/episode?show_id={{$showID}}&season={{.SeasonNumber}}&episode={{.EpisodeNumber}}" class="text-sm text-gray-700 truncate hover:text-indigo-600 transition flex items-center group/item">
@@ -84,7 +84,8 @@
                             </li>
                             {{end}}
                         </ul>
-                        <div class="episode-fade absolute bottom-0 left-0 right-2 h-8 pointer-events-none bg-gradient-to-t from-white to-transparent" aria-hidden="true"></div>
+                        <div class="episode-fade episode-fade-top absolute top-0 left-0 right-2 h-8 pointer-events-none bg-gradient-to-b from-white to-transparent transition-opacity duration-200" aria-hidden="true"></div>
+                        <div class="episode-fade episode-fade-bottom absolute bottom-0 left-0 right-2 h-8 pointer-events-none bg-gradient-to-t from-white to-transparent transition-opacity duration-200" aria-hidden="true"></div>
                     </div>
                 </div>
                 {{end}}
