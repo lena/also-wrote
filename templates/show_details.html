@@ -12,7 +12,7 @@
         <div class="flex items-center gap-4 text-gray-300 text-sm md:text-base mb-4">
             <span class="bg-indigo-600 text-white px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider">Series</span>
             <span>{{.Show.NumberOfSeasons}} Seasons</span>
-            <span>Started {{.Show.FirstAirDate}}</span>
+            <span>Started {{formatDate .Show.FirstAirDate}}</span>
         </div>
         <p class="text-gray-200 line-clamp-3 text-lg drop-shadow-sm max-w-3xl">{{.Show.Overview}}</p>
     </div>
@@ -47,7 +47,7 @@
                                         {{.Name}}
                                     </h3>
                                 </a>
-                                <span class="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-1 rounded">{{.AirDate}}</span>
+                                <span class="text-xs text-gray-500 font-medium bg-gray-100 px-2 py-1 rounded">{{formatDate .AirDate}}</span>
                             </div>
                             <p class="text-gray-600 text-sm mb-4 line-clamp-2 leading-relaxed">{{.Overview}}</p>
                             

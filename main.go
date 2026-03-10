@@ -73,6 +73,16 @@ func init() {
 			}
 			return colors[h%len(colors)]
 		},
+		"formatDate": func(s string) string {
+			if s == "" {
+				return s
+			}
+			t, err := time.Parse("2006-01-02", s)
+			if err != nil {
+				return s
+			}
+			return t.Format("Jan 2 2006")
+		},
 	}
 	templates, err = template.New("").Funcs(funcMap).ParseGlob("templates/*.html")
 	if err != nil {

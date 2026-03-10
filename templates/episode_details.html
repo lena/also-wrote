@@ -24,7 +24,7 @@
         <h1 class="text-4xl md:text-6xl font-extrabold text-white mb-2 drop-shadow-md">{{.Episode.Name}}</h1>
         <div class="flex items-center gap-4 text-gray-300 text-sm md:text-base mb-4">
             <span class="bg-indigo-600 text-white px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider">S{{.Episode.SeasonNumber}} E{{.Episode.EpisodeNumber}}</span>
-            <span>Aired {{.Episode.AirDate}}</span>
+            <span>Aired {{formatDate .Episode.AirDate}}</span>
             <a href="/show?id={{.Show.ID}}" class="hover:text-indigo-300 transition">{{.Show.Name}}</a>
         </div>
         <p class="text-gray-200 line-clamp-3 text-lg drop-shadow-sm max-w-3xl">{{.Episode.Overview}}</p>
