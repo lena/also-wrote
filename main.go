@@ -13,8 +13,8 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
-	"net/mail"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,6 +31,9 @@ var (
 	loginLimiter   = ratelimit.NewLimiter(5, 15*time.Minute)
 	generalLimiter = ratelimit.NewLimiter(60, time.Minute)
 )
+
+// emailRegex validates format: local@domain.tld (single dot in domain, TLD 2–6 letters)
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9.!#$%&'*+/=?^_` + "`" + `{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,6}$`)
 
 const maxRequestBodyBytes = 1 << 20 // 1 MB — cap request bodies to avoid DoS
 
@@ -558,7 +561,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		if _, err := mail.ParseAddress(email); err != nil {
+		if !emailRegex.MatchString(email) {
 			renderTemplate(w, r, "login.html", map[string]interface{}{
 				"User":  nil,
 				"Error": "Please enter a valid email address.",
