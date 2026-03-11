@@ -762,12 +762,14 @@ func handleFavoriteWritersOverlapGraph(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type graphNode struct {
-		ID          string  `json:"id"`
-		Type        string  `json:"type"` // "writer" or "show"
-		Name        string  `json:"name"`
-		PosterPath  string  `json:"poster_path,omitempty"`
-		ProfilePath string  `json:"profile_path,omitempty"`
-		Priority    float64 `json:"priority,omitempty"`
+		ID           string  `json:"id"`
+		Type         string  `json:"type"` // "writer" or "show"
+		Name         string  `json:"name"`
+		PosterPath   string  `json:"poster_path,omitempty"`
+		ProfilePath  string  `json:"profile_path,omitempty"`
+		Priority     float64 `json:"priority,omitempty"`
+		WriterCount  int     `json:"writer_count,omitempty"`  // for shows: number of favorite writers who worked on it
+		FirstAirDate string  `json:"first_air_date,omitempty"` // for shows: YYYY-MM-DD
 	}
 	type graphEdge struct {
 		Source string `json:"source"`
@@ -777,6 +779,7 @@ func handleFavoriteWritersOverlapGraph(w http.ResponseWriter, r *http.Request) {
 	// Fetch writer details (name, profile) and build writer nodes
 	writerNodes := make(map[int]*graphNode)
 	var wg sync.WaitGroup
+	var mu sync.Mutex
 	for _, pid := range personIDs {
 		wg.Add(1)
 		go func(personID int) {
@@ -785,19 +788,20 @@ func handleFavoriteWritersOverlapGraph(w http.ResponseWriter, r *http.Request) {
 			if err != nil || p == nil {
 				return
 			}
+			mu.Lock()
 			writerNodes[personID] = &graphNode{
 				ID:          fmt.Sprintf("w-%d", personID),
 				Type:        "writer",
 				Name:        p.Name,
 				ProfilePath: p.ProfilePath,
 			}
+			mu.Unlock()
 		}(pid)
 	}
 	wg.Wait()
 
 	// showID -> show node info and writer list for priority
 	shows := make(map[int]*graphNode)
-	var mu sync.Mutex
 	writerToShows := make(map[int][]int) // personID -> showIDs
 	for _, pid := range personIDs {
 		wg.Add(1)
@@ -816,10 +820,11 @@ func handleFavoriteWritersOverlapGraph(w http.ResponseWriter, r *http.Request) {
 				s, ok := shows[c.ID]
 				if !ok {
 					s = &graphNode{
-						ID:         fmt.Sprintf("s-%d", c.ID),
-						Type:       "show",
-						Name:       c.Name,
-						PosterPath: c.PosterPath,
+						ID:           fmt.Sprintf("s-%d", c.ID),
+						Type:         "show",
+						Name:         c.Name,
+						PosterPath:   c.PosterPath,
+						FirstAirDate: c.FirstAirDate,
 					}
 					shows[c.ID] = s
 				}
@@ -846,7 +851,9 @@ func handleFavoriteWritersOverlapGraph(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	for sid, s := range shows {
-		s.Priority = float64(showWriterCount[sid])*50 + s.Priority
+		c := showWriterCount[sid]
+		s.WriterCount = c
+		s.Priority = float64(c)*50 + s.Priority
 	}
 
 	// Build edges: writer -> show for each credit
