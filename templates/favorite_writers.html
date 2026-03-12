@@ -39,11 +39,13 @@
             <h2 class="text-xl font-bold text-white">Writer-Series Overlap Graph</h2>
             <button type="button" id="overlap-graph-close" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition" aria-label="Close">✕</button>
         </div>
-        <div id="overlap-graph-container" class="flex-1 min-h-0 relative w-full">
+        <div id="overlap-graph-container" class="flex-1 min-h-0 relative w-full overflow-hidden touch-none">
             <div id="overlap-graph-loading" class="absolute inset-0 flex items-center justify-center text-slate-400 bg-slate-800/90 z-10 hidden">Loading…</div>
             <div id="overlap-graph-error" class="absolute inset-0 flex items-center justify-center text-red-400 bg-slate-800/90 z-10 hidden"></div>
+            <div id="overlap-graph-viewport" class="absolute left-0 top-0 will-change-transform">
             <svg id="overlap-graph-links" class="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true"></svg>
             <div id="overlap-graph-nodes" class="absolute inset-0 pointer-events-none"></div>
+            </div>
         </div>
         <div id="overlap-graph-legend" class="flex flex-wrap items-center gap-3 px-6 py-2 border-t border-slate-600 shrink-0 bg-slate-800/50 text-slate-300 text-xs"></div>
         <p class="text-slate-400 text-sm px-6 py-3 border-t border-slate-600 shrink-0">Shows your favorite writers have worked on. Line color = writer. Larger show cards = more of your favorite writers worked on it.</p>
@@ -57,12 +59,13 @@
     var closeBtn = document.getElementById('overlap-graph-close');
     var backdrop = document.getElementById('overlap-graph-backdrop');
     var container = document.getElementById('overlap-graph-container');
+    var viewport = document.getElementById('overlap-graph-viewport');
     var linksSvg = document.getElementById('overlap-graph-links');
     var nodesDiv = document.getElementById('overlap-graph-nodes');
     var loadingEl = document.getElementById('overlap-graph-loading');
     var errorEl = document.getElementById('overlap-graph-error');
     var legendEl = document.getElementById('overlap-graph-legend');
-    if (!modal || !btn || !container || !linksSvg || !nodesDiv) return;
+    if (!modal || !btn || !container || !linksSvg || !nodesDiv || !viewport) return;
 
     function showLoading(show) {
         if (loadingEl) loadingEl.classList.toggle('hidden', !show);
@@ -185,8 +188,24 @@
             return;
         }
 
-        var width = container.offsetWidth;
-        var height = container.offsetHeight;
+        var isMobile = window.matchMedia('(max-width: 767px)').matches;
+        var graphWidth, graphHeight;
+        if (isMobile) {
+            graphWidth = 1200;
+            graphHeight = 900;
+            viewport.style.width = graphWidth + 'px';
+            viewport.style.height = graphHeight + 'px';
+            viewport.style.transformOrigin = '0 0';
+        } else {
+            graphWidth = container.offsetWidth;
+            graphHeight = container.offsetHeight;
+            viewport.style.width = '100%';
+            viewport.style.height = '100%';
+            viewport.style.transform = '';
+        }
+
+        var width = graphWidth;
+        var height = graphHeight;
         var contentLeft = axisWidth;
         var centerX = contentLeft + (width - contentLeft - 2 * padding) / 2;
         var centerY = height / 2;
@@ -280,6 +299,108 @@
             linkEls.attr('x1', function(d) { return d.source.x; }).attr('y1', function(d) { return d.source.y; }).attr('x2', function(d) { return d.target.x; }).attr('y2', function(d) { return d.target.y; });
             nodeWrap.style('left', function(d) { return (d.x - d.cardW/2) + 'px'; }).style('top', function(d) { return (d.y - d.cardH/2) + 'px'; });
         }
+
+        if (isMobile) {
+            setupPanZoom(viewport, container, graphWidth, graphHeight);
+        }
+    }
+
+    function setupPanZoom(viewportEl, containerEl, graphW, graphH) {
+        var cw = containerEl.offsetWidth;
+        var ch = containerEl.offsetHeight;
+        var minScale = Math.min(cw / graphW, ch / graphH);
+        var maxScale = 3;
+        var scale = minScale;
+        var tx = (cw - graphW * scale) / (2 * scale);
+        var ty = (ch - graphH * scale) / (2 * scale);
+
+        function applyTransform() {
+            viewportEl.style.transform = 'scale(' + scale + ') translate(' + tx + 'px,' + ty + 'px)';
+        }
+        applyTransform();
+
+        var lastDist = 0, lastCenterX = 0, lastCenterY = 0;
+        var lastSingleX = 0, lastSingleY = 0;
+        var totalDx = 0, totalDy = 0;
+        var panning = false;
+        var tapThreshold = 10;
+
+        function dist(t1, t2) {
+            return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+        }
+        function centerX(t1, t2) { return (t1.clientX + t2.clientX) / 2; }
+        function centerY(t1, t2) { return (t1.clientY + t2.clientY) / 2; }
+
+        containerEl.addEventListener('touchstart', function(e) {
+            if (e.touches.length === 2) {
+                panning = true;
+                lastDist = dist(e.touches[0], e.touches[1]);
+                lastCenterX = centerX(e.touches[0], e.touches[1]);
+                lastCenterY = centerY(e.touches[0], e.touches[1]);
+            } else if (e.touches.length === 1) {
+                totalDx = 0;
+                totalDy = 0;
+                panning = false;
+                lastSingleX = e.touches[0].clientX;
+                lastSingleY = e.touches[0].clientY;
+            }
+        }, { passive: true });
+
+        containerEl.addEventListener('touchmove', function(e) {
+            if (e.touches.length === 2) {
+                e.preventDefault();
+                panning = true;
+                var d = dist(e.touches[0], e.touches[1]);
+                var cx = centerX(e.touches[0], e.touches[1]);
+                var cy = centerY(e.touches[0], e.touches[1]);
+                if (lastDist > 0) {
+                    var newScale = scale * (d / lastDist);
+                    scale = Math.max(minScale, Math.min(maxScale, newScale));
+                    var dx = (cx - lastCenterX) / scale;
+                    var dy = (cy - lastCenterY) / scale;
+                    tx += dx;
+                    ty += dy;
+                }
+                lastDist = d;
+                lastCenterX = cx;
+                lastCenterY = cy;
+                applyTransform();
+            } else if (e.touches.length === 1) {
+                var dx = e.touches[0].clientX - lastSingleX;
+                var dy = e.touches[0].clientY - lastSingleY;
+                totalDx += dx;
+                totalDy += dy;
+                if (!panning && (Math.abs(totalDx) > tapThreshold || Math.abs(totalDy) > tapThreshold)) {
+                    panning = true;
+                    e.preventDefault();
+                    tx += totalDx / scale;
+                    ty += totalDy / scale;
+                    lastSingleX = e.touches[0].clientX;
+                    lastSingleY = e.touches[0].clientY;
+                    applyTransform();
+                } else if (panning) {
+                    e.preventDefault();
+                    tx += dx / scale;
+                    ty += dy / scale;
+                    lastSingleX = e.touches[0].clientX;
+                    lastSingleY = e.touches[0].clientY;
+                    applyTransform();
+                }
+            }
+        }, { passive: false });
+
+        containerEl.addEventListener('touchend', function(e) {
+            if (e.touches.length === 2) {
+                lastDist = dist(e.touches[0], e.touches[1]);
+                lastCenterX = centerX(e.touches[0], e.touches[1]);
+                lastCenterY = centerY(e.touches[0], e.touches[1]);
+            } else if (e.touches.length === 1) {
+                lastSingleX = e.touches[0].clientX;
+                lastSingleY = e.touches[0].clientY;
+            } else {
+                lastDist = 0;
+            }
+        }, { passive: true });
     }
 })();
 </script>
