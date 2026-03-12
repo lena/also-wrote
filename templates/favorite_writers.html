@@ -47,7 +47,10 @@
             <div id="overlap-graph-nodes" class="absolute inset-0 pointer-events-none"></div>
             </div>
         </div>
-        <div id="overlap-graph-legend" class="flex flex-wrap items-center gap-3 px-4 py-1.5 border-t border-slate-600 shrink-0 bg-slate-800/50 text-slate-300 text-xs"></div>
+        <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-1.5 border-t border-slate-600 shrink-0 bg-slate-800/50 text-slate-300 text-xs">
+            <div id="overlap-graph-legend" class="flex flex-wrap items-center gap-3 min-w-0 flex-1"></div>
+            <div id="overlap-graph-overlap-filter" class="flex items-center gap-2 shrink-0 flex-wrap justify-end"></div>
+        </div>
         <p class="text-slate-400 text-sm px-4 py-2 border-t border-slate-600 shrink-0">Shows your favorite writers have worked on. Line color = writer. Larger show cards = more of your favorite writers worked on it.</p>
     </div>
 </div>
@@ -65,6 +68,7 @@
     var loadingEl = document.getElementById('overlap-graph-loading');
     var errorEl = document.getElementById('overlap-graph-error');
     var legendEl = document.getElementById('overlap-graph-legend');
+    var overlapFilterEl = document.getElementById('overlap-graph-overlap-filter');
     if (!modal || !btn || !container || !linksSvg || !nodesDiv || !viewport) return;
 
     function showLoading(show) {
@@ -146,15 +150,105 @@
         writerNodes.forEach(function(d, i) {
             writerColorScale[d.id] = writerLinkColors[i % writerLinkColors.length];
         });
+        var hiddenWriters = new Set();
+        var minOverlap = 1;
+        var showToWriters = {};
+        var showWriterCount = {};
+        var writerToShows = {};
+        function showPassesOverlap(d) { return (d.writer_count || 0) >= minOverlap; }
+        function writerPassesOverlap(writerId) {
+            var shows = writerToShows[writerId];
+            if (!shows || shows.length === 0) return false;
+            return shows.some(function(showId) { return (showWriterCount[showId] || 0) >= minOverlap; });
+        }
+        function updateVisibility() {
+            linkEls.attr('stroke-opacity', function(d) {
+                var writerId = (d.source.type === 'writer' ? d.source.id : d.target.id);
+                var showNode = d.source.type === 'show' ? d.source : d.target;
+                if (hiddenWriters.has(writerId)) return 0;
+                if (!showPassesOverlap(showNode) || !writerPassesOverlap(writerId)) return 0;
+                return 0.85;
+            });
+            nodeWrap.style('opacity', function(d) {
+                if (d.type === 'writer') {
+                    if (hiddenWriters.has(d.id)) return 0;
+                    return writerPassesOverlap(d.id) ? 1 : 0;
+                }
+                if (!showPassesOverlap(d)) return 0;
+                var writers = showToWriters[d.id];
+                if (!writers || writers.length === 0) return 1;
+                var allHidden = writers.every(function(wid) { return hiddenWriters.has(wid); });
+                return allHidden ? 0 : 1;
+            });
+            nodeWrap.style('pointer-events', function(d) {
+                if (d.type === 'writer') {
+                    if (hiddenWriters.has(d.id)) return 'none';
+                    return writerPassesOverlap(d.id) ? 'auto' : 'none';
+                }
+                if (!showPassesOverlap(d)) return 'none';
+                var writers = showToWriters[d.id];
+                if (!writers || writers.length === 0) return 'auto';
+                var allHidden = writers.every(function(wid) { return hiddenWriters.has(wid); });
+                return allHidden ? 'none' : 'auto';
+            });
+            updateLegendState();
+        }
+        function updateLegendState() {
+            if (!legendEl) return;
+            var buttons = legendEl.querySelectorAll('button[data-writer-id]');
+            for (var i = 0; i < buttons.length; i++) {
+                var btn = buttons[i];
+                var id = btn.getAttribute('data-writer-id');
+                var visible = !hiddenWriters.has(id) && writerPassesOverlap(id);
+                btn.classList.toggle('opacity-50', !visible);
+                btn.setAttribute('aria-pressed', visible ? 'false' : 'true');
+            }
+        }
         if (legendEl) {
             legendEl.innerHTML = '';
             writerNodes.forEach(function(w) {
                 var c = writerColorScale[w.id] || '#6366f1';
-                var item = document.createElement('span');
-                item.className = 'inline-flex items-center gap-1.5';
-                item.innerHTML = '<span class="rounded-full w-3 h-3 shrink-0" style="background:' + c + '"></span><span class="truncate max-w-[120px]">' + (w.name || '').replace(/</g, '&lt;') + '</span>';
+                var item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'legend-writer inline-flex items-center gap-1.5 cursor-pointer rounded px-1.5 py-0.5 hover:bg-slate-700 transition text-left border border-transparent hover:border-slate-600';
+                item.setAttribute('data-writer-id', w.id);
+                item.setAttribute('aria-pressed', 'false');
+                item.innerHTML = '<span class="legend-dot rounded-full w-3 h-3 shrink-0" style="background:' + c + '"></span><span class="legend-name truncate max-w-[120px]">' + (w.name || '').replace(/</g, '&lt;') + '</span>';
+                item.addEventListener('click', function() {
+                    var id = this.getAttribute('data-writer-id');
+                    if (hiddenWriters.has(id)) hiddenWriters.delete(id);
+                    else hiddenWriters.add(id);
+                    updateVisibility();
+                });
                 legendEl.appendChild(item);
             });
+        }
+        if (overlapFilterEl) {
+            overlapFilterEl.innerHTML = '';
+            var label = document.createElement('span');
+            label.className = 'text-slate-400 shrink-0';
+            label.textContent = 'Overlap:';
+            overlapFilterEl.appendChild(label);
+            var maxOverlap = Math.max(1, maxWriterCount);
+            for (var n = 1; n <= maxOverlap; n++) {
+                var wrap = document.createElement('label');
+                wrap.className = 'inline-flex items-center gap-1 cursor-pointer select-none';
+                var input = document.createElement('input');
+                input.type = 'radio';
+                input.name = 'overlap-min';
+                input.value = n;
+                input.checked = n === 1;
+                input.className = 'rounded border-slate-500 text-indigo-600 focus:ring-indigo-500';
+                input.addEventListener('change', function() {
+                    minOverlap = parseInt(this.value, 10);
+                    updateVisibility();
+                });
+                wrap.appendChild(input);
+                var text = document.createElement('span');
+                text.textContent = n + '+';
+                wrap.appendChild(text);
+                overlapFilterEl.appendChild(wrap);
+            }
         }
 
         var nodes = (data.nodes || []).map(function(d) {
@@ -197,6 +291,21 @@
             showError('No shows to display. Add more favorite writers.');
             return;
         }
+
+        nodes.forEach(function(n) {
+            if (n.type === 'show') showWriterCount[n.id] = n.writer_count || 0;
+        });
+        var writerIdSet = new Set();
+        nodes.forEach(function(n) { if (n.type === 'writer') writerIdSet.add(n.id); });
+        links.forEach(function(link) {
+            var src = link.source, tgt = link.target;
+            var writerId = writerIdSet.has(src) ? src : tgt;
+            var showId = writerIdSet.has(src) ? tgt : src;
+            if (!showToWriters[showId]) showToWriters[showId] = [];
+            if (showToWriters[showId].indexOf(writerId) === -1) showToWriters[showId].push(writerId);
+            if (!writerToShows[writerId]) writerToShows[writerId] = [];
+            if (writerToShows[writerId].indexOf(showId) === -1) writerToShows[writerId].push(showId);
+        });
 
         var isMobile = window.matchMedia('(max-width: 767px)').matches;
         var graphWidth, graphHeight;
@@ -300,6 +409,7 @@
         });
 
         function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+        var didInitialVisibility = false;
         function ticked() {
             nodes.forEach(function(d) {
                 var halfW = d.cardW / 2, halfH = d.cardH / 2;
@@ -308,6 +418,10 @@
             });
             linkEls.attr('x1', function(d) { return d.source.x; }).attr('y1', function(d) { return d.source.y; }).attr('x2', function(d) { return d.target.x; }).attr('y2', function(d) { return d.target.y; });
             nodeWrap.style('left', function(d) { return (d.x - d.cardW/2) + 'px'; }).style('top', function(d) { return (d.y - d.cardH/2) + 'px'; });
+            if (!didInitialVisibility) {
+                didInitialVisibility = true;
+                updateVisibility();
+            }
         }
 
         if (isMobile) {
