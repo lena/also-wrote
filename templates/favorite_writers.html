@@ -191,6 +191,18 @@
                 var allHidden = writers.every(function(wid) { return hiddenWriters.has(wid); });
                 return allHidden ? 'none' : 'auto';
             });
+            updateLegendState();
+        }
+        function updateLegendState() {
+            if (!legendEl) return;
+            var buttons = legendEl.querySelectorAll('button[data-writer-id]');
+            for (var i = 0; i < buttons.length; i++) {
+                var btn = buttons[i];
+                var id = btn.getAttribute('data-writer-id');
+                var visible = !hiddenWriters.has(id) && writerPassesOverlap(id);
+                btn.classList.toggle('opacity-50', !visible);
+                btn.setAttribute('aria-pressed', visible ? 'false' : 'true');
+            }
         }
         if (legendEl) {
             legendEl.innerHTML = '';
@@ -204,15 +216,8 @@
                 item.innerHTML = '<span class="legend-dot rounded-full w-3 h-3 shrink-0" style="background:' + c + '"></span><span class="legend-name truncate max-w-[120px]">' + (w.name || '').replace(/</g, '&lt;') + '</span>';
                 item.addEventListener('click', function() {
                     var id = this.getAttribute('data-writer-id');
-                    if (hiddenWriters.has(id)) {
-                        hiddenWriters.delete(id);
-                        this.classList.remove('opacity-50');
-                        this.setAttribute('aria-pressed', 'false');
-                    } else {
-                        hiddenWriters.add(id);
-                        this.classList.add('opacity-50');
-                        this.setAttribute('aria-pressed', 'true');
-                    }
+                    if (hiddenWriters.has(id)) hiddenWriters.delete(id);
+                    else hiddenWriters.add(id);
                     updateVisibility();
                 });
                 legendEl.appendChild(item);
@@ -404,6 +409,7 @@
         });
 
         function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+        var didInitialVisibility = false;
         function ticked() {
             nodes.forEach(function(d) {
                 var halfW = d.cardW / 2, halfH = d.cardH / 2;
@@ -412,6 +418,10 @@
             });
             linkEls.attr('x1', function(d) { return d.source.x; }).attr('y1', function(d) { return d.source.y; }).attr('x2', function(d) { return d.target.x; }).attr('y2', function(d) { return d.target.y; });
             nodeWrap.style('left', function(d) { return (d.x - d.cardW/2) + 'px'; }).style('top', function(d) { return (d.y - d.cardH/2) + 'px'; });
+            if (!didInitialVisibility) {
+                didInitialVisibility = true;
+                updateVisibility();
+            }
         }
 
         if (isMobile) {
