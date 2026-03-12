@@ -47,9 +47,9 @@
             <div id="overlap-graph-nodes" class="absolute inset-0 pointer-events-none"></div>
             </div>
         </div>
-        <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-1.5 border-t border-slate-600 shrink-0 bg-slate-800/50 text-slate-300 text-xs">
-            <div id="overlap-graph-legend" class="flex flex-wrap items-center gap-3 min-w-0 flex-1"></div>
-            <div id="overlap-graph-overlap-filter" class="flex items-center gap-2 shrink-0 flex-wrap justify-end"></div>
+        <div class="flex flex-col sm:flex-row sm:items-start gap-3 px-4 py-1.5 border-t border-slate-600 shrink-0 bg-slate-800/50 text-slate-300 text-xs">
+            <div id="overlap-graph-legend" class="flex flex-wrap items-center gap-3 min-w-0 flex-1 max-h-[6rem] overflow-y-auto overflow-x-hidden episode-list-scroll md:max-h-none md:overflow-visible"></div>
+            <div id="overlap-graph-overlap-filter" class="flex flex-nowrap items-center gap-2 min-w-0 overflow-x-auto scrollbar-hide-x shrink-0"></div>
         </div>
         <p class="text-slate-400 text-sm px-4 py-2 border-t border-slate-600 shrink-0">Shows your favorite writers have worked on. Line color = writer. Larger show cards = more of your favorite writers worked on it.</p>
     </div>
@@ -210,7 +210,7 @@
                 var c = writerColorScale[w.id] || '#6366f1';
                 var item = document.createElement('button');
                 item.type = 'button';
-                item.className = 'legend-writer inline-flex items-center gap-1.5 cursor-pointer rounded px-1.5 py-0.5 hover:bg-slate-700 transition text-left border border-transparent hover:border-slate-600';
+                item.className = 'legend-writer inline-flex items-center gap-1.5 cursor-pointer rounded px-1.5 py-0.5 hover:bg-slate-700 transition text-left border border-transparent hover:border-slate-600 shrink-0';
                 item.setAttribute('data-writer-id', w.id);
                 item.setAttribute('aria-pressed', 'false');
                 item.innerHTML = '<span class="legend-dot rounded-full w-3 h-3 shrink-0" style="background:' + c + '"></span><span class="legend-name truncate max-w-[120px]">' + (w.name || '').replace(/</g, '&lt;') + '</span>';
@@ -226,13 +226,13 @@
         if (overlapFilterEl) {
             overlapFilterEl.innerHTML = '';
             var label = document.createElement('span');
-            label.className = 'text-slate-400 shrink-0';
+            label.className = 'text-slate-400 shrink-0 font-medium';
             label.textContent = 'Overlap:';
             overlapFilterEl.appendChild(label);
             var maxOverlap = Math.max(1, maxWriterCount);
             for (var n = 1; n <= maxOverlap; n++) {
                 var wrap = document.createElement('label');
-                wrap.className = 'inline-flex items-center gap-1 cursor-pointer select-none';
+                wrap.className = 'inline-flex items-center gap-1.5 cursor-pointer select-none shrink-0';
                 var input = document.createElement('input');
                 input.type = 'radio';
                 input.name = 'overlap-min';

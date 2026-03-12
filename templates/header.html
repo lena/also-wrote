@@ -28,6 +28,14 @@
         .episode-list-scroll::-webkit-scrollbar {
             display: none;
         }
+        /* Hide horizontal scrollbar (e.g. legend strip); scroll still works */
+        .scrollbar-hide-x {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .scrollbar-hide-x::-webkit-scrollbar {
+            display: none;
+        }
         .episode-fade { opacity: 0; transition: opacity 0.2s ease; }
         /* Modal above sticky nav when overlap graph is open */
         body.modal-open main { z-index: 60; }
