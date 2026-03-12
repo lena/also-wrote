@@ -84,6 +84,14 @@ A simple Go application to discover the writers behind your favorite TV shows us
 go test ./...
 ```
 
+**Pre-commit hook** — Run all tests (unit + DB integration) before every commit:
+
+```bash
+cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+```
+
+You must have the test database (`createdb also_wrote_test`) for the hook to pass.
+
 **To run DB integration tests** Use a separate test database so tests don’t touch dev data.
 
 1.  **PostgreSQL**: Create a local database for tests:

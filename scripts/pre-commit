@@ -1,0 +1,50 @@
+#!/bin/sh
+# Pre-commit hook: run unit tests, then DB integration tests. Install with:
+#   cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+# Requires: createdb also_wrote_test (see Testing section in README)
+
+# Green and red output
+red=$(printf '\033[31m')
+grn=$(printf '\033[32m')
+rst=$(printf '\033[0m')
+
+set -e
+cd "$(git rev-parse --show-toplevel)"
+
+# Print green "." per pass, red "F" per fail on one line; on failure list test name + file below
+run_tests() {
+  label=$1
+  shift
+  set +e
+  out=$("$@" 2>&1)
+  ret=$?
+  set -e
+  echo -n "$label "
+  echo "$out" | awk -v grn="$grn" -v red="$red" -v rst="$rst" '
+    /_test\.go:[0-9]+:/ { if (match($0, /[^ ]+_test\.go/)) last_file = substr($0, RSTART, RLENGTH); next }
+    /^--- PASS:/ { printf "%s.%s", grn, rst; next }
+    /^--- FAIL:/ {
+      sub(/^--- FAIL: /, ""); sub(/ .*$/, ""); testname = $0
+      printf "%sF%s", red, rst
+      failures[++n] = (last_file != "" ? testname " (" last_file ")" : testname)
+      last_file = ""
+      next
+    }
+    END {
+      printf "\n"
+      for (i = 1; i <= n; i++) print "  " failures[i]
+    }
+  '
+  if [ $ret -ne 0 ]; then
+    echo ""
+    echo "Full output:"
+    printf '%s\n' "$out"
+    exit 1
+  fi
+}
+
+run_tests "Unit tests:" go test -v ./...
+run_tests "Integration tests:" go test -tags=integration -v ./...
+
+echo ""
+echo "${grn}All tests passed.${rst}"
