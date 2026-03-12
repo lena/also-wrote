@@ -12,7 +12,7 @@ import (
 const (
 	BaseURL      = "https://api.themoviedb.org/3"
 	ImageBaseURL = "https://image.tmdb.org/t/p/w500" // Use w500 for decent quality
-	cacheTTL     = 10 * time.Minute                  // Cache TMDB responses to reduce API calls
+	cacheTTL     = 24 * time.Hour
 )
 
 type Client struct {

@@ -143,6 +143,7 @@ func main() {
 	http.HandleFunc("/logout", handleLogout)
 	http.HandleFunc("/favorite-writers", ratelimit.Middleware(generalLimiter, handleFavoriteWriters))
 	http.HandleFunc("/api/favorite-writers", ratelimit.Middleware(generalLimiter, handleFavoriteWritersAPI))
+	http.HandleFunc("/api/favorite-writers/overlap-graph", ratelimit.Middleware(generalLimiter, handleFavoriteWritersOverlapGraph))
 	http.HandleFunc("/api/favorite-writers/", ratelimit.Middleware(generalLimiter, handleFavoriteWritersAPIDelete))
 
 	// Serve static files (favicon)
@@ -734,6 +735,152 @@ func handleFavoriteWritersAPI(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+}
+
+func handleFavoriteWritersOverlapGraph(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := getCurrentUser(r)
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	personIDs, err := database.FavoriteWriterPersonIDs(user.ID)
+	if err != nil {
+		http.Error(w, "Could not load favorite writers", http.StatusInternalServerError)
+		return
+	}
+	if len(personIDs) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"nodes": []interface{}{},
+			"edges": []interface{}{},
+		})
+		return
+	}
+
+	type graphNode struct {
+		ID           string  `json:"id"`
+		Type         string  `json:"type"` // "writer" or "show"
+		Name         string  `json:"name"`
+		PosterPath   string  `json:"poster_path,omitempty"`
+		ProfilePath  string  `json:"profile_path,omitempty"`
+		Priority     float64 `json:"priority,omitempty"`
+		WriterCount  int     `json:"writer_count,omitempty"`  // for shows: number of favorite writers who worked on it
+		FirstAirDate string  `json:"first_air_date,omitempty"` // for shows: YYYY-MM-DD
+	}
+	type graphEdge struct {
+		Source string `json:"source"`
+		Target string `json:"target"`
+	}
+
+	// Fetch writer details (name, profile) and build writer nodes
+	writerNodes := make(map[int]*graphNode)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	for _, pid := range personIDs {
+		wg.Add(1)
+		go func(personID int) {
+			defer wg.Done()
+			p, err := tmdbClient.GetPersonDetails(personID)
+			if err != nil || p == nil {
+				return
+			}
+			mu.Lock()
+			writerNodes[personID] = &graphNode{
+				ID:          fmt.Sprintf("w-%d", personID),
+				Type:        "writer",
+				Name:        p.Name,
+				ProfilePath: p.ProfilePath,
+			}
+			mu.Unlock()
+		}(pid)
+	}
+	wg.Wait()
+
+	// showID -> show node info and writer list for priority
+	shows := make(map[int]*graphNode)
+	writerToShows := make(map[int][]int) // personID -> showIDs
+	for _, pid := range personIDs {
+		wg.Add(1)
+		go func(personID int) {
+			defer wg.Done()
+			credits, err := tmdbClient.GetPersonTVCredits(personID)
+			if err != nil || credits == nil {
+				return
+			}
+			var showIDs []int
+			for _, c := range credits.Crew {
+				if c.Department != "Writing" {
+					continue
+				}
+				mu.Lock()
+				s, ok := shows[c.ID]
+				if !ok {
+					s = &graphNode{
+						ID:           fmt.Sprintf("s-%d", c.ID),
+						Type:         "show",
+						Name:         c.Name,
+						PosterPath:   c.PosterPath,
+						FirstAirDate: c.FirstAirDate,
+					}
+					shows[c.ID] = s
+				}
+				s.Priority += float64(c.EpisodeCount)
+				showIDs = append(showIDs, c.ID)
+				mu.Unlock()
+			}
+			mu.Lock()
+			writerToShows[personID] = showIDs
+			mu.Unlock()
+		}(pid)
+	}
+	wg.Wait()
+
+	// Count distinct writers per show for priority
+	showWriterCount := make(map[int]int)
+	for _, showIDs := range writerToShows {
+		seen := make(map[int]bool)
+		for _, sid := range showIDs {
+			if !seen[sid] {
+				seen[sid] = true
+				showWriterCount[sid]++
+			}
+		}
+	}
+	for sid, s := range shows {
+		c := showWriterCount[sid]
+		s.WriterCount = c
+		s.Priority = float64(c)*50 + s.Priority
+	}
+
+	// Build edges: writer -> show for each credit
+	var edges []graphEdge
+	for personID, showIDs := range writerToShows {
+		writerID := fmt.Sprintf("w-%d", personID)
+		for _, sid := range showIDs {
+			edges = append(edges, graphEdge{Source: writerID, Target: fmt.Sprintf("s-%d", sid)})
+		}
+	}
+
+	// Collect all nodes (writers first, then shows)
+	nodes := make([]*graphNode, 0, len(writerNodes)+len(shows))
+	for _, pid := range personIDs {
+		if n := writerNodes[pid]; n != nil {
+			nodes = append(nodes, n)
+		}
+	}
+	for _, s := range shows {
+		nodes = append(nodes, s)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"nodes": nodes,
+		"edges": edges,
+	})
 }
 
 func handleFavoriteWritersAPIDelete(w http.ResponseWriter, r *http.Request) {

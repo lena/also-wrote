@@ -1,8 +1,13 @@
 {{template "header" .}}
 <div class="container mx-auto px-4 py-8">
     <h1 class="text-4xl font-bold text-white mb-2">Favorite Writers</h1>
-    <p class="text-slate-300 mb-8">Writers you’ve favorited. Click to visit their page.</p>
+    <p class="text-slate-300 mb-6">Writers you’ve favorited. Click to visit their page.</p>
     {{if .Writers}}
+    <div class="mb-8">
+        <button type="button" id="overlap-graph-btn" class="px-4 py-2 rounded-full border-2 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 transition font-semibold text-sm">
+            See overlap graph
+        </button>
+    </div>
     <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6">
         {{range .Writers}}
         <a href="/writer?id={{.ID}}" class="group block text-center">
@@ -24,4 +29,259 @@
     </div>
     {{end}}
 </div>
+
+{{if .Writers}}
+<!-- Overlap graph modal -->
+<div id="overlap-graph-modal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" id="overlap-graph-backdrop"></div>
+    <div class="absolute inset-4 md:inset-8 lg:inset-12 bg-slate-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-600 shrink-0">
+            <h2 class="text-xl font-bold text-white">Writer-Series Overlap Graph</h2>
+            <button type="button" id="overlap-graph-close" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition" aria-label="Close">✕</button>
+        </div>
+        <div id="overlap-graph-container" class="flex-1 min-h-0 relative w-full">
+            <div id="overlap-graph-loading" class="absolute inset-0 flex items-center justify-center text-slate-400 bg-slate-800/90 z-10 hidden">Loading…</div>
+            <div id="overlap-graph-error" class="absolute inset-0 flex items-center justify-center text-red-400 bg-slate-800/90 z-10 hidden"></div>
+            <svg id="overlap-graph-links" class="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true"></svg>
+            <div id="overlap-graph-nodes" class="absolute inset-0 pointer-events-none"></div>
+        </div>
+        <div id="overlap-graph-legend" class="flex flex-wrap items-center gap-3 px-6 py-2 border-t border-slate-600 shrink-0 bg-slate-800/50 text-slate-300 text-xs"></div>
+        <p class="text-slate-400 text-sm px-6 py-3 border-t border-slate-600 shrink-0">Shows your favorite writers have worked on. Line color = writer. Larger show cards = more of your favorite writers worked on it.</p>
+    </div>
+</div>
+<script src="https://unpkg.com/d3@7.8.5/dist/d3.min.js"></script>
+<script>
+(function() {
+    var modal = document.getElementById('overlap-graph-modal');
+    var btn = document.getElementById('overlap-graph-btn');
+    var closeBtn = document.getElementById('overlap-graph-close');
+    var backdrop = document.getElementById('overlap-graph-backdrop');
+    var container = document.getElementById('overlap-graph-container');
+    var linksSvg = document.getElementById('overlap-graph-links');
+    var nodesDiv = document.getElementById('overlap-graph-nodes');
+    var loadingEl = document.getElementById('overlap-graph-loading');
+    var errorEl = document.getElementById('overlap-graph-error');
+    var legendEl = document.getElementById('overlap-graph-legend');
+    if (!modal || !btn || !container || !linksSvg || !nodesDiv) return;
+
+    function showLoading(show) {
+        if (loadingEl) loadingEl.classList.toggle('hidden', !show);
+        if (errorEl) errorEl.classList.add('hidden');
+    }
+    function showError(msg) {
+        if (loadingEl) loadingEl.classList.add('hidden');
+        if (errorEl) { errorEl.textContent = msg || 'Could not load graph.'; errorEl.classList.remove('hidden'); }
+    }
+
+    function openModal() {
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+        loadGraph();
+    }
+    function closeModal() {
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+    btn.addEventListener('click', openModal);
+    closeBtn.addEventListener('click', closeModal);
+    backdrop.addEventListener('click', closeModal);
+
+    var showCardMinW = 72, showCardMinH = 100;
+    var showCardMaxW = 120, showCardMaxH = 168;
+    var writerCardMinW = 72, writerCardMaxW = 240;
+    var writerCardH = 40;
+    var padding = 16;
+    var axisWidth = 44;
+    var writerLinkColors = ['#6366f1','#8b5cf6','#a855f7','#d946ef','#ec4899','#f43f5e','#0ea5e9','#14b8a6','#eab308','#f97316'];
+    var sim = null;
+
+    function loadGraph() {
+        showLoading(true);
+        var csrfToken = document.querySelector('meta[name="csrf-token"]') && document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        var headers = {};
+        if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+        fetch('/api/favorite-writers/overlap-graph', { credentials: 'same-origin', headers: headers })
+            .then(function(r) {
+                if (!r.ok) throw new Error('Failed to load');
+                return r.json();
+            })
+            .then(function(data) {
+                showLoading(false);
+                requestAnimationFrame(function() {
+                    requestAnimationFrame(function() {
+                        try {
+                            runGraph(data);
+                        } catch (err) {
+                            showError('Could not draw graph.');
+                            console.error(err);
+                        }
+                    });
+                });
+            })
+            .catch(function() {
+                showError('Could not load graph.');
+            });
+    }
+
+    function runGraph(data) {
+        if (errorEl) errorEl.classList.add('hidden');
+        var writerNodes = (data.nodes || []).filter(function(d) { return d.type === 'writer'; });
+        var showNodes = (data.nodes || []).filter(function(d) { return d.type === 'show'; });
+        var maxWriterCount = Math.max.apply(null, showNodes.map(function(d) { return d.writer_count || 1; })) || 1;
+        var minWriterCount = Math.min.apply(null, showNodes.map(function(d) { return d.writer_count || 1; })) || 1;
+        var writerColorScale = {};
+        writerNodes.forEach(function(d, i) {
+            writerColorScale[d.id] = writerLinkColors[i % writerLinkColors.length];
+        });
+        if (legendEl) {
+            legendEl.innerHTML = '';
+            writerNodes.forEach(function(w) {
+                var c = writerColorScale[w.id] || '#6366f1';
+                var item = document.createElement('span');
+                item.className = 'inline-flex items-center gap-1.5';
+                item.innerHTML = '<span class="rounded-full w-3 h-3 shrink-0" style="background:' + c + '"></span><span class="truncate max-w-[120px]">' + (w.name || '').replace(/</g, '&lt;') + '</span>';
+                legendEl.appendChild(item);
+            });
+        }
+
+        var nodes = (data.nodes || []).map(function(d) {
+            var isWriter = d.type === 'writer';
+            var w, h;
+            if (isWriter) {
+                var nameLen = (d.name || '').length;
+                w = Math.min(writerCardMaxW, Math.max(writerCardMinW, Math.ceil(nameLen * 7.5)));
+                h = writerCardH;
+            } else {
+                var wc = typeof d.writer_count === 'number' ? d.writer_count : 1;
+                var t = maxWriterCount <= minWriterCount ? 1 : (wc - minWriterCount) / (maxWriterCount - minWriterCount);
+                w = Math.round(showCardMinW + t * (showCardMaxW - showCardMinW));
+                h = Math.round(showCardMinH + t * (showCardMaxH - showCardMinH));
+            }
+            var year = null;
+            if (d.type === 'show' && d.first_air_date) {
+                var match = String(d.first_air_date).match(/^(\d{4})/);
+                if (match) year = parseInt(match[1], 10);
+            }
+            return {
+                id: String(d.id),
+                type: d.type || 'show',
+                name: d.name || '',
+                poster_path: d.poster_path || '',
+                profile_path: d.profile_path || '',
+                priority: typeof d.priority === 'number' ? d.priority : 0,
+                writer_count: d.writer_count,
+                year: year,
+                cardW: w,
+                cardH: h,
+                targetY: null,
+                x: 0, y: 0
+            };
+        });
+        var links = (data.edges || []).map(function(e) {
+            return { source: String(e.source), target: String(e.target) };
+        });
+        if (nodes.length === 0) {
+            showError('No shows to display. Add more favorite writers.');
+            return;
+        }
+
+        var width = container.offsetWidth;
+        var height = container.offsetHeight;
+        var contentLeft = axisWidth;
+        var centerX = contentLeft + (width - contentLeft - 2 * padding) / 2;
+        var centerY = height / 2;
+        if (width <= 0 || height <= 0) {
+            showError('Graph area too small.');
+            return;
+        }
+
+        var showYears = nodes.filter(function(d) { return d.type === 'show' && d.year != null; }).map(function(d) { return d.year; });
+        var minYear = showYears.length ? Math.min.apply(null, showYears) : 1990;
+        var maxYear = showYears.length ? Math.max.apply(null, showYears) : new Date().getFullYear();
+        minYear = Math.floor(minYear / 10) * 10;
+        maxYear = Math.ceil(maxYear / 10) * 10;
+        if (maxYear <= minYear) maxYear = minYear + 10;
+        var yearScale = d3.scaleLinear().domain([maxYear, minYear]).range([padding, height - padding]);
+        nodes.forEach(function(n) {
+            n.targetY = n.type === 'show' && n.year != null ? yearScale(n.year) : centerY;
+        });
+
+        var tickYears = [];
+        for (var y = maxYear; y >= minYear; y -= 10) { tickYears.push(y); }
+        if (tickYears.length === 0) tickYears = [maxYear];
+
+        linksSvg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+        linksSvg.innerHTML = '';
+        var axisG = d3.select(linksSvg).append('g').attr('class', 'axis').attr('aria-hidden', 'true');
+        tickYears.forEach(function(yr) {
+            axisG.append('text').attr('x', 10).attr('y', yearScale(yr)).attr('fill', '#64748b').attr('font-size', '11px').attr('font-weight', '500').attr('dominant-baseline', 'middle').text(yr);
+        });
+        nodesDiv.innerHTML = '';
+
+        var maxPriority = Math.max.apply(null, nodes.map(function(d) { return d.priority; })) || 1;
+        nodes.forEach(function(n, i) {
+            var cols = Math.ceil(Math.sqrt(nodes.length));
+            n.x = centerX + (i % cols - cols / 2) * 160;
+            n.y = n.targetY != null ? n.targetY : centerY;
+        });
+
+        var linkForce = d3.forceLink(links).id(function(d) { return d.id; }).distance(140).strength(0.2);
+        var chargeForce = d3.forceManyBody().strength(-420);
+        var centerForce = d3.forceCenter(centerX, centerY).strength(0.02);
+        var pullStrength = 0.0004;
+        var xForce = d3.forceX(centerX).strength(function(d) { return pullStrength * (d.priority / maxPriority); });
+        var yForce = d3.forceY(function(d) { return d.targetY; }).strength(function(d) { return d.type === 'show' ? 0.2 : 0.02; });
+        var collideForce = d3.forceCollide(function(d) { return Math.max(d.cardW, d.cardH) / 2 + 8; }).iterations(2);
+
+        sim = d3.forceSimulation(nodes)
+            .force('link', linkForce)
+            .force('charge', chargeForce)
+            .force('center', centerForce)
+            .force('x', xForce)
+            .force('y', yForce)
+            .force('collision', collideForce)
+            .on('tick', ticked);
+
+        var linkEls = d3.select(linksSvg).append('g').selectAll('line').data(links).join('line')
+            .attr('stroke', function(d) { return writerColorScale[d.source.id] || '#6366f1'; })
+            .attr('stroke-width', 2)
+            .attr('stroke-opacity', 0.85);
+        var nodeWrap = d3.select(nodesDiv).selectAll('div').data(nodes).join('div')
+            .attr('class', 'absolute pointer-events-auto')
+            .style('width', function(d) { return d.cardW + 'px'; })
+            .style('height', function(d) { return d.cardH + 'px'; })
+            .style('left', function(d) { return (d.x - d.cardW/2) + 'px'; })
+            .style('top', function(d) { return (d.y - d.cardH/2) + 'px'; });
+        nodeWrap.each(function(d) {
+            var el = d3.select(this);
+            if (d.type === 'writer') {
+                var personId = d.id.replace(/^w-/, '');
+                el.append('a').attr('href', '/writer?id=' + personId).attr('class', 'flex items-center justify-center w-full h-full rounded-xl px-2.5 py-1 bg-violet-500/20 border border-violet-300/50 shadow hover:bg-violet-500/30 hover:border-violet-400 transition text-white whitespace-nowrap')
+                    .append('span').attr('class', 'text-xs font-semibold').text(d.name);
+            } else {
+                el.append('a').attr('href', '/show?id=' + d.id.replace(/^s-/, '')).attr('class', 'flex flex-col w-full h-full rounded-xl overflow-hidden bg-slate-700 shadow-lg hover:shadow-indigo-500/20 hover:ring-2 hover:ring-indigo-400 transition');
+                var inner = el.select('a');
+                if (d.poster_path) {
+                    inner.append('img').attr('src', 'https://image.tmdb.org/t/p/w154' + d.poster_path).attr('alt', d.name).attr('class', 'w-full flex-1 min-h-0 object-cover');
+                } else {
+                    inner.append('div').attr('class', 'w-full flex-1 min-h-0 bg-slate-600 flex items-center justify-center text-slate-400 text-2xl').text('?');
+                }
+                inner.append('p').attr('class', 'p-1.5 text-xs font-semibold text-white truncate shrink-0').text(d.name);
+            }
+        });
+
+        function clamp(x, lo, hi) { return Math.max(lo, Math.min(hi, x)); }
+        function ticked() {
+            nodes.forEach(function(d) {
+                var halfW = d.cardW / 2, halfH = d.cardH / 2;
+                d.x = clamp(d.x, contentLeft + padding + halfW, width - padding - halfW);
+                d.y = clamp(d.y, padding + halfH, height - padding - halfH);
+            });
+            linkEls.attr('x1', function(d) { return d.source.x; }).attr('y1', function(d) { return d.source.y; }).attr('x2', function(d) { return d.target.x; }).attr('y2', function(d) { return d.target.y; });
+            nodeWrap.style('left', function(d) { return (d.x - d.cardW/2) + 'px'; }).style('top', function(d) { return (d.y - d.cardH/2) + 'px'; });
+        }
+    }
+})();
+</script>
+{{end}}
 {{template "footer" .}}
