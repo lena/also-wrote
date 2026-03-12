@@ -29,6 +29,8 @@
             display: none;
         }
         .episode-fade { opacity: 0; transition: opacity 0.2s ease; }
+        /* Modal above sticky nav when overlap graph is open */
+        body.modal-open main { z-index: 60; }
         @media (max-width: 640px) {
             #hero-search::placeholder { font-size: 0.875rem; }
         }

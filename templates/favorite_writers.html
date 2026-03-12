@@ -32,12 +32,12 @@
 
 {{if .Writers}}
 <!-- Overlap graph modal -->
-<div id="overlap-graph-modal" class="fixed inset-0 z-50 hidden" aria-hidden="true">
+<div id="overlap-graph-modal" class="fixed inset-0 z-[100] hidden" aria-hidden="true">
     <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" id="overlap-graph-backdrop"></div>
     <div class="absolute inset-x-4 inset-y-2 md:inset-x-8 md:inset-y-4 lg:inset-12 bg-slate-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
         <div class="flex items-center justify-between px-4 py-2 border-b border-slate-600 shrink-0 bg-slate-800">
             <h2 class="text-xl font-bold text-white">Writer-Series Overlap Graph</h2>
-            <button type="button" id="overlap-graph-close-header" class="hidden md:flex p-3 min-w-[44px] min-h-[44px] items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition" aria-label="Close">✕</button>
+            <button type="button" id="overlap-graph-close-header" class="flex p-3 min-w-[48px] min-h-[48px] items-center justify-center rounded-lg bg-slate-600 text-white font-bold text-lg border-2 border-slate-500 hover:bg-slate-500 active:bg-slate-400 transition touch-manipulation shrink-0" style="touch-action: manipulation;" aria-label="Close">✕</button>
         </div>
         <div id="overlap-graph-container" class="flex-1 min-h-0 relative w-full overflow-hidden touch-none">
             <div id="overlap-graph-loading" class="absolute inset-0 flex items-center justify-center text-slate-400 bg-slate-800/90 z-10 hidden">Loading…</div>
@@ -50,7 +50,6 @@
         <div id="overlap-graph-legend" class="flex flex-wrap items-center gap-3 px-4 py-1.5 border-t border-slate-600 shrink-0 bg-slate-800/50 text-slate-300 text-xs"></div>
         <p class="text-slate-400 text-sm px-4 py-2 border-t border-slate-600 shrink-0">Shows your favorite writers have worked on. Line color = writer. Larger show cards = more of your favorite writers worked on it.</p>
     </div>
-    <button type="button" id="overlap-graph-close" class="fixed top-4 right-4 z-[100] w-12 h-12 flex items-center justify-center rounded-full bg-slate-600 border-2 border-white/30 text-white text-xl font-bold shadow-xl hover:bg-slate-500 active:bg-slate-400 transition touch-manipulation" style="touch-action: manipulation;" aria-label="Close graph">✕</button>
 </div>
 <script src="https://unpkg.com/d3@7.8.5/dist/d3.min.js"></script>
 <script>
@@ -78,6 +77,7 @@
     }
 
     function openModal() {
+        document.body.classList.add('modal-open');
         modal.classList.remove('hidden');
         modal.setAttribute('aria-hidden', 'false');
         loadGraph();
@@ -85,13 +85,19 @@
     function closeModal() {
         modal.classList.add('hidden');
         modal.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('modal-open');
     }
     btn.addEventListener('click', openModal);
-    closeBtn.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); closeModal(); });
-    closeBtn.addEventListener('touchend', function(e) { e.preventDefault(); closeModal(); }, { passive: false });
+    if (closeBtn) {
+        closeBtn.addEventListener('click', function(e) { e.preventDefault(); e.stopPropagation(); closeModal(); });
+        closeBtn.addEventListener('touchend', function(e) { e.preventDefault(); closeModal(); }, { passive: false });
+    }
     backdrop.addEventListener('click', closeModal);
     var closeBtnHeader = document.getElementById('overlap-graph-close-header');
-    if (closeBtnHeader) closeBtnHeader.addEventListener('click', closeModal);
+    if (closeBtnHeader) {
+        closeBtnHeader.addEventListener('click', function(e) { e.preventDefault(); closeModal(); });
+        closeBtnHeader.addEventListener('touchend', function(e) { e.preventDefault(); closeModal(); }, { passive: false });
+    }
 
     var showCardMinW = 72, showCardMinH = 100;
     var showCardMaxW = 120, showCardMaxH = 168;
@@ -322,10 +328,10 @@
             var viewW = graphW * scale;
             var viewH = graphH * scale;
             var margin = 80;
-            var maxTx = margin;
-            var minTx = cw - viewW;
-            var maxTy = margin;
-            var minTy = ch - viewH - margin;
+            var maxTx = viewW >= cw ? 0 : (cw - viewW) / scale;
+            var minTx = viewW >= cw ? (cw - viewW) / scale : 0;
+            var maxTy = margin / scale;
+            var minTy = (ch - viewH - margin) / scale;
             tx = Math.max(minTx, Math.min(maxTx, tx));
             ty = Math.max(minTy, Math.min(maxTy, ty));
         }
