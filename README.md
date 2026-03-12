@@ -32,8 +32,15 @@ A simple Go application to discover the writers behind your favorite TV shows us
   <img src="images/episode_details_page.png" alt="Episode Details" width="500">
   <br><em>Episode Details</em><br><br>
 
+  ### Logged in features
   <img src="images/favorite_writers_page.png" alt="Favorite Writers" width="500">
-  <br><em>Favorite Writers Page (logged in)</em>
+  <br><em>Favorite Writers Page</em><br><br>
+
+  <img src="images/favorite_writers_overlap_modal.png" alt="Favorite Writers Overlap Modal" width="500">
+  <br><em>Writer/Series Overlap Graph</em><br><br>
+
+  <img src="images/favorite_writers_overlap_modal_filtered.png" alt="Favorite Writers Overlap Modal (filtered)" width="500">
+  <br><em>Writer/Series Overlap Graph (filtered)</em><br><br>
 </div>
 
 ## Setup
