@@ -146,13 +146,51 @@
         writerNodes.forEach(function(d, i) {
             writerColorScale[d.id] = writerLinkColors[i % writerLinkColors.length];
         });
+        var hiddenWriters = new Set();
+        var showToWriters = {};
+        function updateVisibility() {
+            linkEls.attr('stroke-opacity', function(d) {
+                var writerId = (d.source.type === 'writer' ? d.source.id : d.target.id);
+                return hiddenWriters.has(writerId) ? 0 : 0.85;
+            });
+            nodeWrap.style('opacity', function(d) {
+                if (d.type === 'writer') return hiddenWriters.has(d.id) ? 0 : 1;
+                var writers = showToWriters[d.id];
+                if (!writers || writers.length === 0) return 1;
+                var allHidden = writers.every(function(wid) { return hiddenWriters.has(wid); });
+                return allHidden ? 0 : 1;
+            });
+            nodeWrap.style('pointer-events', function(d) {
+                if (d.type === 'writer') return hiddenWriters.has(d.id) ? 'none' : 'auto';
+                var writers = showToWriters[d.id];
+                if (!writers || writers.length === 0) return 'auto';
+                var allHidden = writers.every(function(wid) { return hiddenWriters.has(wid); });
+                return allHidden ? 'none' : 'auto';
+            });
+        }
         if (legendEl) {
             legendEl.innerHTML = '';
             writerNodes.forEach(function(w) {
                 var c = writerColorScale[w.id] || '#6366f1';
-                var item = document.createElement('span');
-                item.className = 'inline-flex items-center gap-1.5';
-                item.innerHTML = '<span class="rounded-full w-3 h-3 shrink-0" style="background:' + c + '"></span><span class="truncate max-w-[120px]">' + (w.name || '').replace(/</g, '&lt;') + '</span>';
+                var item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'legend-writer inline-flex items-center gap-1.5 cursor-pointer rounded px-1.5 py-0.5 hover:bg-slate-700 transition text-left border border-transparent hover:border-slate-600';
+                item.setAttribute('data-writer-id', w.id);
+                item.setAttribute('aria-pressed', 'false');
+                item.innerHTML = '<span class="legend-dot rounded-full w-3 h-3 shrink-0" style="background:' + c + '"></span><span class="legend-name truncate max-w-[120px]">' + (w.name || '').replace(/</g, '&lt;') + '</span>';
+                item.addEventListener('click', function() {
+                    var id = this.getAttribute('data-writer-id');
+                    if (hiddenWriters.has(id)) {
+                        hiddenWriters.delete(id);
+                        this.classList.remove('opacity-50');
+                        this.setAttribute('aria-pressed', 'false');
+                    } else {
+                        hiddenWriters.add(id);
+                        this.classList.add('opacity-50');
+                        this.setAttribute('aria-pressed', 'true');
+                    }
+                    updateVisibility();
+                });
                 legendEl.appendChild(item);
             });
         }
@@ -197,6 +235,16 @@
             showError('No shows to display. Add more favorite writers.');
             return;
         }
+
+        var writerIdSet = new Set();
+        nodes.forEach(function(n) { if (n.type === 'writer') writerIdSet.add(n.id); });
+        links.forEach(function(link) {
+            var src = link.source, tgt = link.target;
+            var writerId = writerIdSet.has(src) ? src : tgt;
+            var showId = writerIdSet.has(src) ? tgt : src;
+            if (!showToWriters[showId]) showToWriters[showId] = [];
+            if (showToWriters[showId].indexOf(writerId) === -1) showToWriters[showId].push(writerId);
+        });
 
         var isMobile = window.matchMedia('(max-width: 767px)').matches;
         var graphWidth, graphHeight;
