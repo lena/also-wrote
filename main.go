@@ -83,6 +83,28 @@ func init() {
 			}
 			return t.Format("Jan 2 2006")
 		},
+		"formatPacificTime": func(t interface{}) string {
+			if t == nil {
+				return "—"
+			}
+			var tm time.Time
+			switch v := t.(type) {
+			case *time.Time:
+				if v == nil {
+					return "—"
+				}
+				tm = *v
+			case time.Time:
+				tm = v
+			default:
+				return "—"
+			}
+			loc, err := time.LoadLocation("America/Los_Angeles")
+			if err != nil {
+				return tm.UTC().Format("Jan 2, 2006 3:04 PM MST")
+			}
+			return tm.In(loc).Format("Jan 2, 2006 3:04 PM MST")
+		},
 	}
 	templates, err = template.New("").Funcs(funcMap).ParseGlob("templates/*.html")
 	if err != nil {
@@ -108,6 +130,13 @@ func loadEnv() {
 			os.Setenv(strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]))
 		}
 	}
+}
+
+func isAdmin(u *db.User) bool {
+	if u == nil {
+		return false
+	}
+	return u.Email == os.Getenv("ADMIN_EMAIL")
 }
 
 func getCurrentUser(r *http.Request) *db.User {
@@ -145,6 +174,7 @@ func main() {
 	http.HandleFunc("/api/favorite-writers", ratelimit.Middleware(generalLimiter, handleFavoriteWritersAPI))
 	http.HandleFunc("/api/favorite-writers/overlap-graph", ratelimit.Middleware(generalLimiter, handleFavoriteWritersOverlapGraph))
 	http.HandleFunc("/api/favorite-writers/", ratelimit.Middleware(generalLimiter, handleFavoriteWritersAPIDelete))
+	http.HandleFunc("/admin", ratelimit.Middleware(generalLimiter, handleAdmin))
 
 	// Serve static files (favicon)
 	fs := http.FileServer(http.Dir("static"))
@@ -477,6 +507,9 @@ func renderTemplate(w http.ResponseWriter, r *http.Request, tmpl string, data ma
 	if _, ok := data["CsrfToken"]; !ok {
 		data["CsrfToken"] = getOrCreateCSRFToken(w, r)
 	}
+	if _, ok := data["Admin"]; !ok {
+		data["Admin"] = isAdmin(getCurrentUser(r))
+	}
 	err := templates.ExecuteTemplate(w, tmpl, data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -653,6 +686,9 @@ func handleAuthVerify(w http.ResponseWriter, r *http.Request) {
 	} else {
 		auth.SetSession(w, user, secret)
 	}
+	if err := database.RecordLogin(user.ID); err != nil {
+		log.Printf("RecordLogin: %v", err)
+	}
 	http.Redirect(w, r, "/", http.StatusFound)
 }
 
@@ -706,6 +742,24 @@ func handleFavoriteWriters(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func handleAdmin(w http.ResponseWriter, r *http.Request) {
+	user := getCurrentUser(r)
+	if !isAdmin(user) {
+		http.NotFound(w, r)
+		return
+	}
+	list, err := database.ListUsersWithFavoriteCount()
+	if err != nil {
+		log.Printf("admin list users: %v", err)
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+	renderTemplate(w, r, "admin.html", map[string]interface{}{
+		"User": user,
+		"Users": list,
+	})
+}
+
 func handleFavoriteWritersAPI(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -747,7 +801,20 @@ func handleFavoriteWritersOverlapGraph(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	personIDs, err := database.FavoriteWriterPersonIDs(user.ID)
+	targetUserID := user.ID
+	if uidStr := r.URL.Query().Get("user_id"); uidStr != "" {
+		if !isAdmin(user) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		uid, err := strconv.ParseInt(uidStr, 10, 64)
+		if err != nil || uid <= 0 {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+		targetUserID = uid
+	}
+	personIDs, err := database.FavoriteWriterPersonIDs(targetUserID)
 	if err != nil {
 		http.Error(w, "Could not load favorite writers", http.StatusInternalServerError)
 		return

@@ -88,6 +88,9 @@
                 </button>
                 <div class="absolute right-0 top-full mt-1 py-1 min-w-[12rem] max-w-[20rem] bg-white rounded-lg shadow-lg border border-gray-100 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
                     <a href="/favorite-writers" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-indigo-600">Favorite Writers</a>
+                    {{if .Admin}}
+                    <a href="/admin" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-indigo-600">Admin</a>
+                    {{end}}
                     <form action="/logout" method="POST" class="border-t border-gray-100">
                         <input type="hidden" name="csrf_token" value="{{.CsrfToken}}">
                         <button type="submit" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-red-600">Log out <span class="text-gray-500 font-normal">({{.User.Email}})</span></button>
