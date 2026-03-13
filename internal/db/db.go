@@ -213,3 +213,34 @@ func (db *DB) IsFavoriteWriter(userID int64, personID int) (bool, error) {
 	}
 	return true, nil
 }
+
+// UserWithFavoriteCount is a user row with their favorite writers count (for admin list).
+type UserWithFavoriteCount struct {
+	ID                   int64
+	Email                string
+	FavoriteWritersCount int
+}
+
+// ListUsersWithFavoriteCount returns all users with their favorite writer count, ordered by user id.
+func (db *DB) ListUsersWithFavoriteCount() ([]UserWithFavoriteCount, error) {
+	rows, err := db.Query(`
+		SELECT u.id, u.email, COUNT(f.person_id)::int AS favorite_writers_count
+		FROM users u
+		LEFT JOIN user_fave_writers f ON f.user_id = u.id
+		GROUP BY u.id, u.email
+		ORDER BY u.id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []UserWithFavoriteCount
+	for rows.Next() {
+		var row UserWithFavoriteCount
+		if err := rows.Scan(&row.ID, &row.Email, &row.FavoriteWritersCount); err != nil {
+			return nil, err
+		}
+		list = append(list, row)
+	}
+	return list, rows.Err()
+}

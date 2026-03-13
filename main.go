@@ -110,6 +110,13 @@ func loadEnv() {
 	}
 }
 
+func isAdmin(u *db.User) bool {
+	if u == nil {
+		return false
+	}
+	return u.Email == os.Getenv("ADMIN_EMAIL")
+}
+
 func getCurrentUser(r *http.Request) *db.User {
 	c, err := r.Cookie(auth.CookieName)
 	if err != nil || c.Value == "" {
@@ -145,6 +152,7 @@ func main() {
 	http.HandleFunc("/api/favorite-writers", ratelimit.Middleware(generalLimiter, handleFavoriteWritersAPI))
 	http.HandleFunc("/api/favorite-writers/overlap-graph", ratelimit.Middleware(generalLimiter, handleFavoriteWritersOverlapGraph))
 	http.HandleFunc("/api/favorite-writers/", ratelimit.Middleware(generalLimiter, handleFavoriteWritersAPIDelete))
+	http.HandleFunc("/admin", ratelimit.Middleware(generalLimiter, handleAdmin))
 
 	// Serve static files (favicon)
 	fs := http.FileServer(http.Dir("static"))
@@ -477,6 +485,9 @@ func renderTemplate(w http.ResponseWriter, r *http.Request, tmpl string, data ma
 	if _, ok := data["CsrfToken"]; !ok {
 		data["CsrfToken"] = getOrCreateCSRFToken(w, r)
 	}
+	if _, ok := data["Admin"]; !ok {
+		data["Admin"] = isAdmin(getCurrentUser(r))
+	}
 	err := templates.ExecuteTemplate(w, tmpl, data)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -703,6 +714,24 @@ func handleFavoriteWriters(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, r, "favorite_writers.html", map[string]interface{}{
 		"User":    user,
 		"Writers": writers,
+	})
+}
+
+func handleAdmin(w http.ResponseWriter, r *http.Request) {
+	user := getCurrentUser(r)
+	if !isAdmin(user) {
+		http.NotFound(w, r)
+		return
+	}
+	list, err := database.ListUsersWithFavoriteCount()
+	if err != nil {
+		log.Printf("admin list users: %v", err)
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+	renderTemplate(w, r, "admin.html", map[string]interface{}{
+		"User": user,
+		"Users": list,
 	})
 }
 
