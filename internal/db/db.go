@@ -14,9 +14,11 @@ type DB struct {
 
 // User represents a logged-in user (magic link auth).
 type User struct {
-	ID        int64
-	Email     string
-	CreatedAt time.Time
+	ID           int64
+	Email        string
+	CreatedAt    time.Time
+	LoginCount   int64
+	LastLoginAt  *time.Time
 }
 
 // Open connects to PostgreSQL using conn (e.g. from DATABASE_URL).
@@ -78,6 +80,21 @@ func (db *DB) migrate() error {
 		return err
 	}
 
+	// Login history (UTC) and denormalized counts on users
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS user_logins (
+			id          BIGSERIAL PRIMARY KEY,
+			user_id     BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			logged_in_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
+		CREATE INDEX IF NOT EXISTS idx_user_logins_user_id ON user_logins(user_id);
+	`)
+	if err != nil {
+		return err
+	}
+	_, _ = db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS login_count BIGINT NOT NULL DEFAULT 0`)
+	_, _ = db.Exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`)
+
 	return nil
 }
 
@@ -85,9 +102,9 @@ func (db *DB) migrate() error {
 func (db *DB) UserByID(id int64) (*User, error) {
 	var u User
 	err := db.QueryRow(
-		`SELECT id, email, created_at FROM users WHERE id = $1`,
+		`SELECT id, email, created_at, COALESCE(login_count, 0), last_login_at FROM users WHERE id = $1`,
 		id,
-	).Scan(&u.ID, &u.Email, &u.CreatedAt)
+	).Scan(&u.ID, &u.Email, &u.CreatedAt, &u.LoginCount, &u.LastLoginAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -101,9 +118,9 @@ func (db *DB) UserByID(id int64) (*User, error) {
 func (db *DB) UserByEmail(email string) (*User, error) {
 	var u User
 	err := db.QueryRow(
-		`SELECT id, email, created_at FROM users WHERE email = $1`,
+		`SELECT id, email, created_at, COALESCE(login_count, 0), last_login_at FROM users WHERE email = $1`,
 		email,
-	).Scan(&u.ID, &u.Email, &u.CreatedAt)
+	).Scan(&u.ID, &u.Email, &u.CreatedAt, &u.LoginCount, &u.LastLoginAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -117,9 +134,9 @@ func (db *DB) UserByEmail(email string) (*User, error) {
 func (db *DB) CreateUser(email string) (*User, error) {
 	var u User
 	err := db.QueryRow(
-		`INSERT INTO users (email) VALUES ($1) RETURNING id, email, created_at`,
+		`INSERT INTO users (email) VALUES ($1) RETURNING id, email, created_at, COALESCE(login_count, 0), last_login_at`,
 		email,
-	).Scan(&u.ID, &u.Email, &u.CreatedAt)
+	).Scan(&u.ID, &u.Email, &u.CreatedAt, &u.LoginCount, &u.LastLoginAt)
 	if err != nil {
 		return nil, err
 	}
@@ -157,6 +174,16 @@ func (db *DB) ConsumeMagicLinkToken(tokenHash string) (email string, err error) 
 		return "", nil
 	}
 	return email, err
+}
+
+// RecordLogin appends a row to user_logins (stored in UTC) and updates users.login_count and users.last_login_at.
+func (db *DB) RecordLogin(userID int64) error {
+	_, err := db.Exec(`INSERT INTO user_logins (user_id) VALUES ($1)`, userID)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`UPDATE users SET login_count = COALESCE(login_count, 0) + 1, last_login_at = NOW() WHERE id = $1`, userID)
+	return err
 }
 
 // AddFavoriteWriter adds personID to the user's favorite writers. Idempotent.
@@ -214,20 +241,24 @@ func (db *DB) IsFavoriteWriter(userID int64, personID int) (bool, error) {
 	return true, nil
 }
 
-// UserWithFavoriteCount is a user row with their favorite writers count (for admin list).
+// UserWithFavoriteCount is a user row with their favorite writers count and login info (for admin list).
 type UserWithFavoriteCount struct {
 	ID                   int64
 	Email                string
 	FavoriteWritersCount int
+	LoginCount           int64
+	LastLoginAt          *time.Time
 }
 
-// ListUsersWithFavoriteCount returns all users with their favorite writer count, ordered by user id.
+// ListUsersWithFavoriteCount returns all users with favorite writer count and login info, ordered by user id.
+// LastLoginAt is stored in UTC; format for display in Pacific with formatPacificTime.
 func (db *DB) ListUsersWithFavoriteCount() ([]UserWithFavoriteCount, error) {
 	rows, err := db.Query(`
-		SELECT u.id, u.email, COUNT(f.person_id)::int AS favorite_writers_count
+		SELECT u.id, u.email, COUNT(f.person_id)::int AS favorite_writers_count,
+		       COALESCE(u.login_count, 0), u.last_login_at
 		FROM users u
 		LEFT JOIN user_fave_writers f ON f.user_id = u.id
-		GROUP BY u.id, u.email
+		GROUP BY u.id, u.email, u.login_count, u.last_login_at
 		ORDER BY u.id
 	`)
 	if err != nil {
@@ -237,7 +268,7 @@ func (db *DB) ListUsersWithFavoriteCount() ([]UserWithFavoriteCount, error) {
 	var list []UserWithFavoriteCount
 	for rows.Next() {
 		var row UserWithFavoriteCount
-		if err := rows.Scan(&row.ID, &row.Email, &row.FavoriteWritersCount); err != nil {
+		if err := rows.Scan(&row.ID, &row.Email, &row.FavoriteWritersCount, &row.LoginCount, &row.LastLoginAt); err != nil {
 			return nil, err
 		}
 		list = append(list, row)

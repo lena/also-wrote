@@ -10,6 +10,8 @@
                         <th class="px-4 py-3 font-semibold">ID</th>
                         <th class="px-4 py-3 font-semibold">Email</th>
                         <th class="px-4 py-3 font-semibold text-right">Favorite writers</th>
+                        <th class="px-4 py-3 font-semibold text-right">Logins</th>
+                        <th class="px-4 py-3 font-semibold">Last login (PT)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -20,6 +22,8 @@
                         <td class="px-4 py-3 text-right">
                             <button type="button" class="overlap-graph-for-user text-indigo-400 hover:text-indigo-300 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded" data-user-id="{{.ID}}" aria-label="View overlap graph for this user">{{.FavoriteWritersCount}}</button>
                         </td>
+                        <td class="px-4 py-3 text-right">{{.LoginCount}}</td>
+                        <td class="px-4 py-3 text-slate-400">{{formatPacificTime .LastLoginAt}}</td>
                     </tr>
                     {{end}}
                 </tbody>

@@ -83,6 +83,28 @@ func init() {
 			}
 			return t.Format("Jan 2 2006")
 		},
+		"formatPacificTime": func(t interface{}) string {
+			if t == nil {
+				return "—"
+			}
+			var tm time.Time
+			switch v := t.(type) {
+			case *time.Time:
+				if v == nil {
+					return "—"
+				}
+				tm = *v
+			case time.Time:
+				tm = v
+			default:
+				return "—"
+			}
+			loc, err := time.LoadLocation("America/Los_Angeles")
+			if err != nil {
+				return tm.UTC().Format("Jan 2, 2006 3:04 PM MST")
+			}
+			return tm.In(loc).Format("Jan 2, 2006 3:04 PM MST")
+		},
 	}
 	templates, err = template.New("").Funcs(funcMap).ParseGlob("templates/*.html")
 	if err != nil {
@@ -663,6 +685,9 @@ func handleAuthVerify(w http.ResponseWriter, r *http.Request) {
 		log.Println("SESSION_SECRET not set; session will not be stored")
 	} else {
 		auth.SetSession(w, user, secret)
+	}
+	if err := database.RecordLogin(user.ID); err != nil {
+		log.Printf("RecordLogin: %v", err)
 	}
 	http.Redirect(w, r, "/", http.StatusFound)
 }
