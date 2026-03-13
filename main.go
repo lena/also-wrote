@@ -776,7 +776,20 @@ func handleFavoriteWritersOverlapGraph(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	personIDs, err := database.FavoriteWriterPersonIDs(user.ID)
+	targetUserID := user.ID
+	if uidStr := r.URL.Query().Get("user_id"); uidStr != "" {
+		if !isAdmin(user) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		uid, err := strconv.ParseInt(uidStr, 10, 64)
+		if err != nil || uid <= 0 {
+			http.Error(w, "Bad request", http.StatusBadRequest)
+			return
+		}
+		targetUserID = uid
+	}
+	personIDs, err := database.FavoriteWriterPersonIDs(targetUserID)
 	if err != nil {
 		http.Error(w, "Could not load favorite writers", http.StatusInternalServerError)
 		return
