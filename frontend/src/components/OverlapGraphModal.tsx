@@ -152,10 +152,58 @@ function setupPanZoom(
   containerEl.addEventListener('touchmove', onTouchMove, { passive: false })
   containerEl.addEventListener('touchend', onTouchEnd, { passive: true })
 
+  let mouseDown = false
+  let lastMouseX = 0
+  let lastMouseY = 0
+  const onMouseDown = (e: MouseEvent) => {
+    if (e.button === 0) {
+      mouseDown = true
+      lastMouseX = e.clientX
+      lastMouseY = e.clientY
+    }
+  }
+  const onMouseMove = (e: MouseEvent) => {
+    if (mouseDown) {
+      const dx = e.clientX - lastMouseX
+      const dy = e.clientY - lastMouseY
+      lastMouseX = e.clientX
+      lastMouseY = e.clientY
+      tx += dx / scale
+      ty += dy / scale
+      applyTransform()
+    }
+  }
+  const onMouseUp = () => { mouseDown = false }
+  const onMouseLeave = () => { mouseDown = false }
+  const onWheel = (e: WheelEvent) => {
+    e.preventDefault()
+    const factor = e.deltaY > 0 ? 0.9 : 1.1
+    const newScale = Math.max(minScale, Math.min(maxScale, scale * factor))
+    const rect = containerEl.getBoundingClientRect()
+    const cx = e.clientX - rect.left
+    const cy = e.clientY - rect.top
+    const gx = (cx - tx * scale) / scale
+    const gy = (cy - ty * scale) / scale
+    scale = newScale
+    tx = cx / scale - gx
+    ty = cy / scale - gy
+    applyTransform()
+  }
+  containerEl.addEventListener('mousedown', onMouseDown)
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseup', onMouseUp)
+  containerEl.addEventListener('mouseleave', onMouseLeave)
+  containerEl.addEventListener('wheel', onWheel, { passive: false })
+
   return () => {
     containerEl.removeEventListener('touchstart', onTouchStart)
     containerEl.removeEventListener('touchmove', onTouchMove)
     containerEl.removeEventListener('touchend', onTouchEnd)
+    containerEl.removeEventListener('mousedown', onMouseDown)
+    window.removeEventListener('mousemove', onMouseMove)
+    window.removeEventListener('mouseup', onMouseUp)
+    containerEl.removeEventListener('mouseleave', onMouseLeave)
+    containerEl.removeEventListener('wheel', onWheel)
   }
 }
 
@@ -268,16 +316,13 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
         if (isMobile) {
           graphWidth = 1200
           graphHeight = 900
-          viewport.style.width = `${graphWidth}px`
-          viewport.style.height = `${graphHeight}px`
-          viewport.style.transformOrigin = '0 0'
         } else {
           graphWidth = container.offsetWidth
           graphHeight = container.offsetHeight
-          viewport.style.width = '100%'
-          viewport.style.height = '100%'
-          viewport.style.transform = ''
         }
+        viewport.style.width = `${graphWidth}px`
+        viewport.style.height = `${graphHeight}px`
+        viewport.style.transformOrigin = '0 0'
         const width = graphWidth
         const height = graphHeight
         const centerX = axisWidth + (width - axisWidth - 2 * padding) / 2
@@ -379,8 +424,9 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
           .attr('class', 'absolute pointer-events-auto')
           .style('width', (d) => `${d.cardW}px`)
           .style('height', (d) => `${d.cardH}px`)
-          .style('left', (d) => `${d.x - d.cardW / 2}px`)
-          .style('top', (d) => `${d.y - d.cardH / 2}px`)
+          .style('left', (d) => `${d.x}px`)
+          .style('top', (d) => `${d.y}px`)
+          .style('transform', 'translate(-50%, -50%)')
 
         nodeWrap.each(function (d) {
           const el = d3.select(this)
@@ -418,7 +464,7 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
 
         const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x))
         const minCardLeftEdge = axisWidth + 20
-        const bottomMargin = 24
+        const bottomMargin = 40
 
         function ticked() {
           nodes.forEach((d) => {
@@ -428,13 +474,11 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
             d.y = clamp(d.y, padding + halfH, height - padding - halfH - bottomMargin)
           })
           linkEls.attr('x1', (d) => d.source.x).attr('y1', (d) => d.source.y).attr('x2', (d) => d.target.x).attr('y2', (d) => d.target.y)
-          nodeWrap.style('left', (d) => `${d.x - d.cardW / 2}px`).style('top', (d) => `${d.y - d.cardH / 2}px`)
+          nodeWrap.style('left', (d) => `${d.x}px`).style('top', (d) => `${d.y}px`)
         }
         sim.on('tick', ticked)
 
-        if (isMobile) {
-          panZoomCleanupRef.current = setupPanZoom(viewport, container, graphWidth, graphHeight)
-        }
+        panZoomCleanupRef.current = setupPanZoom(viewport, container, graphWidth, graphHeight)
       })
       .catch(() => {
         setLoading(false)
