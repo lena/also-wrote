@@ -7,9 +7,11 @@ import (
 	"also-wrote/internal/ratelimit"
 	"also-wrote/internal/tmdb"
 	"bufio"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log"
 	"math/rand"
 	"net/http"
@@ -26,6 +28,17 @@ import (
 var tmdbClient *tmdb.Client
 var templates *template.Template
 var database *db.DB
+
+// SPA files are embedded so the app works regardless of working directory (e.g. on Render).
+// Build with frontend/dist present: cd frontend && npm run build && cd .. && go build
+//go:embed frontend/dist
+var spaFS embed.FS
+
+// spaDistRoot is frontend/dist as fs.FS, set in main after stripping the prefix
+var spaDistRoot fs.FS
+
+// diskSPARoot is "frontend/dist" for fallback when embed is empty (e.g. go run . without prior build)
+var diskSPARoot string
 
 // Rate limiters: login is strict (5 per 15 min), TMDB/API are moderate (60 per min)
 var (
@@ -185,17 +198,19 @@ func main() {
 	http.HandleFunc("/api/logout", ratelimit.Middleware(generalLimiter, handleAPILogout))
 
 	// Serve static files (favicon)
-	fs := http.FileServer(http.Dir("static"))
-	http.Handle("/static/", http.StripPrefix("/static/", fs))
+	staticFiles := http.FileServer(http.Dir("static"))
+	http.Handle("/static/", http.StripPrefix("/static/", staticFiles))
 	http.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/svg+xml")
 		http.ServeFile(w, r, "static/favicon.svg")
 	})
 
-	// SPA assets (JS, CSS) — served directly so browser gets correct Content-Type
-	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("frontend/dist/assets"))))
-
-	// SPA: serve index.html for all other GETs (client-side routing)
+	// SPA: serve embedded frontend/dist; fall back to disk for local dev
+	spaDistRoot, _ = fs.Sub(spaFS, "frontend/dist")
+	assetsRoot, _ := fs.Sub(spaDistRoot, "assets")
+	diskSPARoot = resolveDiskSPARoot()
+	assetsDir := filepath.Join(diskSPARoot, "assets")
+	http.Handle("/assets/", http.StripPrefix("/assets/", spaOrDiskAssetsHandler(assetsRoot, assetsDir)))
 	http.HandleFunc("/", handleSPA)
 
 	port := os.Getenv("PORT")
@@ -1386,11 +1401,61 @@ func handleAPILogout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
 }
 
+// resolveDiskSPARoot returns a path to frontend/dist where index.html exists (cwd or exe dir), or "frontend/dist" as fallback.
+func resolveDiskSPARoot() string {
+	indexName := filepath.Join("frontend", "dist", "index.html")
+	if wd, err := os.Getwd(); err == nil {
+		if p := filepath.Join(wd, indexName); pathExists(p) {
+			return filepath.Join(wd, "frontend", "dist")
+		}
+	}
+	if exe, err := os.Executable(); err == nil {
+		dir := filepath.Dir(exe)
+		if p := filepath.Join(dir, indexName); pathExists(p) {
+			return filepath.Join(dir, "frontend", "dist")
+		}
+	}
+	return filepath.Join(".", "frontend", "dist")
+}
+
+func pathExists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
 func handleSPA(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.NotFound(w, r)
 		return
 	}
-	// Only serve index.html; /assets/ is handled above
-	http.ServeFile(w, r, filepath.Join("frontend", "dist", "index.html"))
+	indexPath := filepath.Join(diskSPARoot, "index.html")
+	if pathExists(indexPath) {
+		http.ServeFile(w, r, indexPath)
+		return
+	}
+	if f, err := spaDistRoot.Open("index.html"); err == nil {
+		f.Close()
+		http.ServeFileFS(w, r, spaDistRoot, "index.html")
+		return
+	}
+	http.NotFound(w, r)
+}
+
+// spaOrDiskAssetsHandler serves from embedded FS first, then from disk (for local dev).
+func spaOrDiskAssetsHandler(embedded fs.FS, diskDir string) http.Handler {
+	disk := http.FileServer(http.Dir(diskDir))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := r.URL.Path
+		if name == "" || name == "/" {
+			name = "index.html"
+		} else if name[0] == '/' {
+			name = name[1:]
+		}
+		if f, err := embedded.Open(name); err == nil {
+			f.Close()
+			http.FileServer(http.FS(embedded)).ServeHTTP(w, r)
+			return
+		}
+		disk.ServeHTTP(w, r)
+	})
 }
