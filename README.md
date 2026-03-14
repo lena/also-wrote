@@ -56,25 +56,44 @@ A simple Go application to discover the writers behind your favorite TV shows us
     ```bash
     cp .env.example .env
     ```
-4.  **Run the application**:
+4.  **Build the frontend** (TypeScript/React):
+    ```bash
+    cd frontend && npm install && npm run build && cd ..
+    ```
+    Requires Node 20.19+ or 22.12+ for the Vite build.
+5.  **Run the application**:
     ```bash
     go run main.go
     ```
-5.  **Open your browser**:
+6.  **Open your browser**:
     Visit [http://localhost:8080](http://localhost:8080). 
     Without SMTP configured, magic links are printed in the server log when you request a sign-in email.
 
+**Development (frontend hot reload)**  
+Run the Go server and the Vite dev server in two terminals. The frontend proxies `/api`, `/auth`, and `/static` to the Go server.
+```bash
+# Terminal 1
+go run main.go
+
+# Terminal 2
+cd frontend && npm run dev
+```
+Then open [http://localhost:5173](http://localhost:5173). After changes, build the frontend once before deploying.
+
 ## Project Structure
 
-- `main.go`: Main application entry point and HTTP server.
+- `main.go`: Main application entry point, HTTP server, and JSON API for the React app.
 - `internal/tmdb`: TMDB API client implementation.
-- `templates/`: HTML templates for the UI.
-- `static/`: Static assets (if any).
+- `internal/auth`, `internal/db`, `internal/mailer`, `internal/ratelimit`: Backend packages.
+- `frontend/`: TypeScript/React SPA (Vite, React Router, Tailwind). Built output in `frontend/dist` is served by the Go server in production.
+- `static/`: Static assets (e.g. favicon).
 
 ## Dependencies
 
-- Go 1.16+
-- Tailwind CSS (via CDN)
+- Go 1.24+
+- Node 20.19+ or 22.12+ (for frontend build)
+- PostgreSQL
+- Frontend: React, TypeScript, Vite, React Router, Tailwind CSS, D3 (overlap graph)
 
 ## Testing
 

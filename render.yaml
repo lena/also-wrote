@@ -8,9 +8,7 @@ databases:
 services:
   - type: web
     name: also-wrote
-    runtime: go
-    buildCommand: go build -o server .
-    startCommand: ./server
+    runtime: docker
     envVars:
       - key: DATABASE_URL
         fromDatabase:
