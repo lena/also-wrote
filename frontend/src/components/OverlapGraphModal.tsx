@@ -16,8 +16,8 @@ interface GraphLink {
   target: GraphNode
 }
 
-const IMAGE_BASE = 'https://image.tmdb.org/t/p/w154'
-const writerLinkColors = ['#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899', '#f43f5e', '#0ea5e9', '#14b8a6', '#eab308', '#f97316']
+const IMAGE_BASE = 'https://image.tmdb.org/t/p/w500'
+const writerLinkColors = ['#BC0A0A', '#0B5CA6', '#A855F7', '#84CC16', '#EC4899', '#F43F5E', '#C026D3', '#14B8A6', '#EAB308', '#F97316', '#77ee9ae3', '#2410ff', '#059669']
 
 function setupPanZoom(
   viewportEl: HTMLDivElement,
@@ -254,14 +254,15 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
           writerColorScale[d.id] = writerLinkColors[i % writerLinkColors.length]
         })
 
-        const showCardMinW = 72,
-          showCardMinH = 100,
-          showCardMaxW = 120,
-          showCardMaxH = 168,
-          writerCardMinW = 72,
-          writerCardMaxW = 240,
-          writerCardH = 40,
-          padding = 16,
+        const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
+        const showCardMinW = isMobile ? 72 : 52
+        const showCardMinH = isMobile ? 100 : 72
+        const showCardMaxW = isMobile ? 120 : 100
+        const showCardMaxH = isMobile ? 168 : 132
+        const writerCardMinW = isMobile ? 72 : 52
+        const writerCardMaxW = isMobile ? 240 : 200
+        const writerCardH = isMobile ? 40 : 30
+        const padding = 16,
           axisWidth = 44
 
         const nodes: GraphNode[] = (data.nodes || []).map((d) => {
@@ -269,7 +270,8 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
           let cardW: number, cardH: number
           if (isWriter) {
             const nameLen = (d.name || '').length
-            cardW = Math.min(writerCardMaxW, Math.max(writerCardMinW, Math.ceil(nameLen * 7.5)))
+            const nameScale = isMobile ? 7.5 : 6
+            cardW = Math.min(writerCardMaxW, Math.max(writerCardMinW, Math.ceil(nameLen * nameScale)))
             cardH = writerCardH
           } else {
             const wc = typeof d.writer_count === 'number' ? d.writer_count : 1
@@ -310,7 +312,6 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
         const nodesDiv = nodesDivRef.current
         if (!container || !viewport || !linksSvg || !nodesDiv) return
 
-        const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
         let graphWidth: number
         let graphHeight: number
         if (isMobile) {
@@ -411,7 +412,7 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
             const writerId = d.source.type === 'writer' ? d.source.id : d.target.id
             return writerColorScale[writerId] || '#6366f1'
           })
-          .attr('stroke-width', 2)
+          .attr('stroke-width', 1)
           .attr('stroke-opacity', 0.85)
 
         if (!nodesDiv) return
@@ -432,11 +433,15 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
           const el = d3.select(this)
           if (d.type === 'writer') {
             const personId = d.id.replace(/^w-/, '')
+            const writerTextClass = isMobile ? 'text-xs font-semibold antialiased' : 'text-[9px] font-semibold antialiased'
+            const writerLinkClass = isMobile
+              ? 'flex items-center justify-center w-full h-full rounded-xl px-2.5 py-1 bg-violet-500/20 border border-violet-300/50 shadow hover:bg-violet-500/30 hover:border-violet-400 transition text-white whitespace-nowrap'
+              : 'flex items-center justify-center w-full h-full rounded-xl px-2 py-0.5 bg-violet-500/20 border border-violet-300/50 shadow hover:bg-violet-500/30 hover:border-violet-400 transition text-white whitespace-nowrap'
             el.append('a')
               .attr('href', `/writer?id=${personId}`)
-              .attr('class', 'flex items-center justify-center w-full h-full rounded-xl px-2.5 py-1 bg-violet-500/20 border border-violet-300/50 shadow hover:bg-violet-500/30 hover:border-violet-400 transition text-white whitespace-nowrap')
+              .attr('class', writerLinkClass)
               .append('span')
-              .attr('class', 'text-xs font-semibold')
+              .attr('class', writerTextClass)
               .text(d.name || '')
           } else {
             const showId = d.id.replace(/^s-/, '')
@@ -445,11 +450,12 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
               .attr('class', 'flex flex-col w-full h-full rounded-xl overflow-hidden bg-slate-700 shadow-lg hover:shadow-indigo-500/20 hover:ring-2 hover:ring-indigo-400 transition')
             const inner = el.select('a')
             if (d.poster_path) {
-              inner.append('img').attr('src', IMAGE_BASE + d.poster_path).attr('alt', d.name || '').attr('class', 'w-full flex-1 min-h-0 object-cover')
+              inner.append('img').attr('src', IMAGE_BASE + d.poster_path).attr('alt', d.name || '').attr('class', 'w-full flex-1 min-h-0 object-cover').style('image-rendering', 'pixelated')
             } else {
               inner.append('div').attr('class', 'w-full flex-1 min-h-0 bg-slate-600 flex items-center justify-center text-slate-400 text-2xl').text('?')
             }
-            inner.append('p').attr('class', 'p-1.5 text-xs font-semibold text-white truncate shrink-0').text(d.name || '')
+            const showTitleClass = isMobile ? 'p-1.5 text-xs font-semibold text-white truncate shrink-0 antialiased' : 'p-1 text-[9px] font-semibold text-white truncate shrink-0 antialiased'
+            inner.append('p').attr('class', showTitleClass).text(d.name || '')
           }
         })
 
@@ -558,25 +564,25 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
     <div className="fixed inset-0 z-[100]" aria-hidden="false">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} onKeyDown={(e) => e.key === 'Escape' && onClose()} aria-hidden="true" />
       <div className="absolute inset-x-4 inset-y-2 md:inset-x-8 md:inset-y-4 lg:inset-12 bg-slate-800 rounded-2xl shadow-2xl flex flex-col overflow-y-auto overflow-x-hidden min-h-0">
-        <div className="flex items-center justify-between px-4 py-1.5 md:py-2 border-b border-slate-600 shrink-0 bg-slate-800">
-          <h2 className="text-base md:text-xl font-bold text-white">Writer-Series Overlap Graph</h2>
+        <div className="flex items-center justify-between px-3 py-1 md:py-0.5 border-b border-slate-600 shrink-0 bg-slate-800">
+          <h2 className="text-sm md:text-base font-bold text-white">Writer-Series Overlap Graph</h2>
           <button
             type="button"
             onClick={onClose}
-            className="flex p-2 min-w-[40px] min-h-[40px] md:p-3 md:min-w-[48px] md:min-h-[48px] items-center justify-center rounded-lg bg-slate-600 text-white font-bold text-base md:text-lg border-2 border-slate-500 hover:bg-slate-500 active:bg-slate-400 transition touch-manipulation shrink-0"
+            className="flex p-1.5 min-w-[32px] min-h-[32px] md:p-2 md:min-w-[36px] md:min-h-[36px] items-center justify-center rounded-lg bg-slate-600 text-white font-bold text-sm border-2 border-slate-500 hover:bg-slate-500 active:bg-slate-400 transition touch-manipulation shrink-0"
             aria-label="Close"
           >
             ✕
           </button>
         </div>
-        <div ref={containerRef} className="flex-1 min-h-[400px] relative w-full overflow-hidden touch-none">
+        <div ref={containerRef} className="flex-1 min-h-[400px] relative w-full overflow-hidden touch-none select-none">
           {loading && (
             <div className="absolute inset-0 flex items-center justify-center text-slate-400 bg-slate-800/90 z-10">Loading…</div>
           )}
           {error && (
             <div className="absolute inset-0 flex items-center justify-center text-red-400 bg-slate-800/90 z-10">{error}</div>
           )}
-          <div ref={viewportRef} className="absolute left-0 top-0 w-full h-full will-change-transform">
+          <div ref={viewportRef} className="absolute left-0 top-0 w-full h-full will-change-transform [text-rendering:geometricPrecision] [-webkit-font-smoothing:antialiased]">
             <svg ref={linksSvgRef} className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true" />
             <div ref={nodesDivRef} className="absolute inset-0 pointer-events-none" />
           </div>
