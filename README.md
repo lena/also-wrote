@@ -86,7 +86,6 @@ Then open [http://localhost:5173](http://localhost:5173). After changes, build t
 - `internal/tmdb`: TMDB API client implementation.
 - `internal/auth`, `internal/db`, `internal/mailer`, `internal/ratelimit`: Backend packages.
 - `frontend/`: TypeScript/React SPA (Vite, React Router, Tailwind). Built output in `frontend/dist` is served by the Go server in production.
-- `templates/`: Legacy HTML templates (no longer used when the React app is built).
 - `static/`: Static assets (e.g. favicon).
 
 ## Dependencies

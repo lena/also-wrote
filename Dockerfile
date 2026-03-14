@@ -13,7 +13,6 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY main.go ./
 COPY internal/ ./internal/
-COPY templates/ ./templates/
 COPY static/ ./static/
 COPY --from=frontend /app/dist ./frontend/dist
 RUN go build -o server .
@@ -23,7 +22,6 @@ WORKDIR /app
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /app/server ./
 COPY --from=builder /app/frontend ./frontend
-COPY --from=builder /app/templates ./templates
 COPY --from=builder /app/static ./static
 ENV PORT=8080
 EXPOSE 8080
