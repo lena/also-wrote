@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -160,21 +161,28 @@ func getCurrentUser(r *http.Request) *db.User {
 }
 
 func main() {
-	// Order doesn't matter because longest path match is used
-	http.HandleFunc("/", handleHome)
-	http.HandleFunc("/search", ratelimit.Middleware(generalLimiter, handleSearch))
-	http.HandleFunc("/show", ratelimit.Middleware(generalLimiter, handleShow))
-	http.HandleFunc("/writer", ratelimit.Middleware(generalLimiter, handlePerson))
-	http.HandleFunc("/episode", ratelimit.Middleware(generalLimiter, handleEpisode))
-	// Auth & Favorite Writers (login: strict limit on POST only)
-	http.HandleFunc("/login", ratelimit.MiddlewarePost(loginLimiter, handleLogin))
+	// API and auth first (longest path match)
 	http.HandleFunc("/auth/verify", handleAuthVerify)
-	http.HandleFunc("/logout", handleLogout)
-	http.HandleFunc("/favorite-writers", ratelimit.Middleware(generalLimiter, handleFavoriteWriters))
-	http.HandleFunc("/api/favorite-writers", ratelimit.Middleware(generalLimiter, handleFavoriteWritersAPI))
+	http.HandleFunc("/api/favorite-writers", ratelimit.Middleware(generalLimiter, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			handleAPIFavoriteWritersList(w, r)
+			return
+		}
+		handleFavoriteWritersAPI(w, r)
+	}))
 	http.HandleFunc("/api/favorite-writers/overlap-graph", ratelimit.Middleware(generalLimiter, handleFavoriteWritersOverlapGraph))
 	http.HandleFunc("/api/favorite-writers/", ratelimit.Middleware(generalLimiter, handleFavoriteWritersAPIDelete))
-	http.HandleFunc("/admin", ratelimit.Middleware(generalLimiter, handleAdmin))
+
+	// JSON API for React SPA
+	http.HandleFunc("/api/me", ratelimit.Middleware(generalLimiter, handleAPIMe))
+	http.HandleFunc("/api/home", ratelimit.Middleware(generalLimiter, handleAPIHome))
+	http.HandleFunc("/api/search", ratelimit.Middleware(generalLimiter, handleAPISearch))
+	http.HandleFunc("/api/show", ratelimit.Middleware(generalLimiter, handleAPIShow))
+	http.HandleFunc("/api/writer", ratelimit.Middleware(generalLimiter, handleAPIWriter))
+	http.HandleFunc("/api/episode", ratelimit.Middleware(generalLimiter, handleAPIEpisode))
+	http.HandleFunc("/api/admin/users", ratelimit.Middleware(generalLimiter, handleAPIAdminUsers))
+	http.HandleFunc("/api/login", ratelimit.Middleware(loginLimiter, handleAPILogin))
+	http.HandleFunc("/api/logout", ratelimit.Middleware(generalLimiter, handleAPILogout))
 
 	// Serve static files (favicon)
 	fs := http.FileServer(http.Dir("static"))
@@ -183,6 +191,12 @@ func main() {
 		w.Header().Set("Content-Type", "image/svg+xml")
 		http.ServeFile(w, r, "static/favicon.svg")
 	})
+
+	// SPA assets (JS, CSS) — served directly so browser gets correct Content-Type
+	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("frontend/dist/assets"))))
+
+	// SPA: serve index.html for all other GETs (client-side routing)
+	http.HandleFunc("/", handleSPA)
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -976,4 +990,407 @@ func handleFavoriteWritersAPIDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{"ok": true})
+}
+
+// --- JSON API for React SPA ---
+
+func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}
+
+func handleAPIMe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := getCurrentUser(r)
+	token := getOrCreateCSRFToken(w, r)
+	type resp struct {
+		User      *db.User `json:"user"`
+		CsrfToken string   `json:"csrf_token"`
+		Admin     bool     `json:"admin"`
+	}
+	writeJSON(w, http.StatusOK, resp{
+		User:      user,
+		CsrfToken: token,
+		Admin:     isAdmin(user),
+	})
+}
+
+func handleAPIHome(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	allSuggestedTitles := []string{
+		"Arrested Development", "Atlanta", "Battlestar Galactica", "Better Call Saul", "Better Off Ted",
+		"BoJack Horseman", "Buffy the Vampire Slayer", "Glow", "Hacks", "Insecure", "Parks and Recreation",
+		"The Bear", "The Simpsons", "The Sopranos", "The Wire",
+	}
+	suggestedTitles := make([]string, len(allSuggestedTitles))
+	copy(suggestedTitles, allSuggestedTitles)
+	rand.Shuffle(len(suggestedTitles), func(i, j int) { suggestedTitles[i], suggestedTitles[j] = suggestedTitles[j], suggestedTitles[i] })
+	selectedTitles := suggestedTitles[:3]
+	var suggestedShows []tmdb.TVShow
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	for _, title := range selectedTitles {
+		wg.Add(1)
+		go func(t string) {
+			defer wg.Done()
+			results, err := tmdbClient.SearchTVShows(t)
+			if err == nil && len(results) > 0 {
+				mu.Lock()
+				suggestedShows = append(suggestedShows, results[0])
+				mu.Unlock()
+			}
+		}(title)
+	}
+	wg.Wait()
+	writeJSON(w, http.StatusOK, map[string]interface{}{"suggested_shows": suggestedShows})
+}
+
+func handleAPISearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing query"})
+		return
+	}
+	results, err := tmdbClient.SearchTVShows(query)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if len(results) > 0 {
+		var exactMatches []tmdb.TVShow
+		for _, show := range results {
+			if strings.EqualFold(show.Name, query) {
+				exactMatches = append(exactMatches, show)
+			}
+		}
+		if len(exactMatches) > 0 {
+			results = exactMatches
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"results_type": "shows",
+			"query":        query,
+			"shows":        results,
+		})
+		return
+	}
+	people, err := tmdbClient.SearchPeople(query)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	var writers []tmdb.Person
+	for _, p := range people {
+		if p.KnownForDepartment == "Writing" {
+			writers = append(writers, p)
+		}
+	}
+	var peopleResults []tmdb.Person
+	if len(writers) > 0 {
+		peopleResults = writers
+	} else {
+		peopleResults = people
+	}
+	if len(peopleResults) > 0 {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"results_type": "people",
+			"query":        query,
+			"people":       peopleResults,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"results_type": "none",
+		"query":        query,
+	})
+}
+
+func handleAPIShow(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	idStr := r.URL.Query().Get("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		return
+	}
+	showDetails, err := tmdbClient.GetTVShowDetails(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "show not found"})
+		return
+	}
+	var allSeasons []*tmdb.Season
+	var wg sync.WaitGroup
+	resultsCh := make(chan *tmdb.Season, len(showDetails.Seasons))
+	semaphore := make(chan struct{}, 10)
+	for _, s := range showDetails.Seasons {
+		if s.SeasonNumber == 0 {
+			continue
+		}
+		wg.Add(1)
+		go func(sNum int) {
+			defer wg.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+			seasonDetails, err := tmdbClient.GetSeasonDetails(id, sNum)
+			if err != nil {
+				return
+			}
+			resultsCh <- seasonDetails
+		}(s.SeasonNumber)
+	}
+	go func() {
+		wg.Wait()
+		close(resultsCh)
+	}()
+	for s := range resultsCh {
+		allSeasons = append(allSeasons, s)
+	}
+	sort.Slice(allSeasons, func(i, j int) bool {
+		return allSeasons[i].SeasonNumber < allSeasons[j].SeasonNumber
+	})
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"show":    showDetails,
+		"seasons": allSeasons,
+	})
+}
+
+type writerCreditAPI struct {
+	tmdb.Credit
+	Episodes []tmdb.Episode `json:"episodes"`
+}
+
+func handleAPIWriter(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	idStr := r.URL.Query().Get("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		return
+	}
+	person, err := tmdbClient.GetPersonDetails(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "person not found"})
+		return
+	}
+	credits, err := tmdbClient.GetPersonTVCredits(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "credits not found"})
+		return
+	}
+	var writingCredits []writerCreditAPI
+	var wg sync.WaitGroup
+	resultsCh := make(chan writerCreditAPI, len(credits.Crew))
+	semaphore := make(chan struct{}, 10)
+	for _, credit := range credits.Crew {
+		if credit.Department == "Writing" {
+			wg.Add(1)
+			go func(c tmdb.Credit) {
+				defer wg.Done()
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
+				var eps []tmdb.Episode
+				if c.CreditID != "" {
+					details, err := tmdbClient.GetCreditDetails(c.CreditID)
+					if err == nil && details != nil {
+						eps = details.Media.Episodes
+					}
+				}
+				resultsCh <- writerCreditAPI{Credit: c, Episodes: eps}
+			}(credit)
+		}
+	}
+	go func() {
+		wg.Wait()
+		close(resultsCh)
+	}()
+	for wc := range resultsCh {
+		writingCredits = append(writingCredits, wc)
+	}
+	sort.Slice(writingCredits, func(i, j int) bool {
+		return writingCredits[i].FirstAirDate > writingCredits[j].FirstAirDate
+	})
+	user := getCurrentUser(r)
+	var isFavorited bool
+	if user != nil {
+		isFavorited, _ = database.IsFavoriteWriter(user.ID, id)
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"person":        person,
+		"credits":       writingCredits,
+		"is_favorited": isFavorited,
+	})
+}
+
+func handleAPIEpisode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	showID, _ := strconv.Atoi(r.URL.Query().Get("show_id"))
+	seasonNum, _ := strconv.Atoi(r.URL.Query().Get("season"))
+	episodeNum, _ := strconv.Atoi(r.URL.Query().Get("episode"))
+	if showID == 0 || seasonNum == 0 || episodeNum == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid show_id, season, or episode"})
+		return
+	}
+	episode, err := tmdbClient.GetEpisodeDetails(showID, seasonNum, episodeNum)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "episode not found"})
+		return
+	}
+	show, _ := tmdbClient.GetTVShowDetails(showID)
+	seasonCredits, err := tmdbClient.GetSeasonAggregateCredits(showID, seasonNum)
+	var writingStaff []tmdb.AggregateCredit
+	if err == nil {
+		for _, credit := range seasonCredits.Crew {
+			if credit.Department == "Writing" && credit.ID > 0 {
+				writingStaff = append(writingStaff, credit)
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"episode":       episode,
+		"show":          show,
+		"writing_staff": writingStaff,
+	})
+}
+
+func handleAPIFavoriteWritersList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := getCurrentUser(r)
+	if user == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	personIDs, err := database.FavoriteWriterPersonIDs(user.ID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not load favorite writers"})
+		return
+	}
+	var writers []*tmdb.Person
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	for _, id := range personIDs {
+		wg.Add(1)
+		go func(pid int) {
+			defer wg.Done()
+			p, err := tmdbClient.GetPersonDetails(pid)
+			if err == nil && p != nil {
+				mu.Lock()
+				writers = append(writers, p)
+				mu.Unlock()
+			}
+		}(id)
+	}
+	wg.Wait()
+	writeJSON(w, http.StatusOK, map[string]interface{}{"writers": writers})
+}
+
+func handleAPIAdminUsers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := getCurrentUser(r)
+	if !isAdmin(user) {
+		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		return
+	}
+	list, err := database.ListUsersWithFavoriteCount()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"users": list})
+}
+
+func handleAPILogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	user := getCurrentUser(r)
+	if user != nil {
+		writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+	var body struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	email := strings.TrimSpace(body.Email)
+	if email == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Please enter your email."})
+		return
+	}
+	if len(email) > 254 || !emailRegex.MatchString(email) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Please enter a valid email address."})
+		return
+	}
+	raw, tokenHash, err := auth.NewMagicLinkToken()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not create sign-in link."})
+		return
+	}
+	expiresAt := time.Now().Add(auth.TokenExpiry)
+	if err := database.SaveMagicLinkToken(tokenHash, email, expiresAt); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not create sign-in link."})
+		return
+	}
+	baseURL := os.Getenv("APP_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:8080"
+	}
+	link := mailer.MagicLinkURL(baseURL, auth.RawTokenToURLParam(raw))
+	if err := mailer.SendMagicLink(email, link); err != nil {
+		log.Printf("SendMagicLink: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "Could not send email. Try again later."})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+}
+
+func handleAPILogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !auth.VerifyCSRF(r, r.Header.Get("X-CSRF-Token")) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request"})
+		return
+	}
+	auth.ClearSession(w)
+	writeJSON(w, http.StatusOK, map[string]interface{}{"ok": true})
+}
+
+func handleSPA(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	// Only serve index.html; /assets/ is handled above
+	http.ServeFile(w, r, filepath.Join("frontend", "dist", "index.html"))
 }

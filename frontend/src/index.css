@@ -1,0 +1,49 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Inter', sans-serif;
+}
+input, textarea {
+  color: #111827;
+}
+input::placeholder, textarea::placeholder {
+  color: #9ca3af;
+}
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.episode-list-scroll {
+  overflow-y: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.episode-list-scroll::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide-x {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide-x::-webkit-scrollbar {
+  display: none;
+}
+.episode-fade {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+body.modal-open main {
+  z-index: 60;
+}

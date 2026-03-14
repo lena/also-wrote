@@ -1,2 +1,6 @@
 .env
 also-wrote
+
+# Frontend
+frontend/node_modules
+frontend/dist
