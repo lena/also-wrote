@@ -615,6 +615,11 @@ func handleAPIShow(w http.ResponseWriter, r *http.Request) {
 	sort.Slice(allSeasons, func(i, j int) bool {
 		return allSeasons[i].SeasonNumber < allSeasons[j].SeasonNumber
 	})
+	for _, season := range allSeasons {
+		sort.Slice(season.Episodes, func(a, b int) bool {
+			return season.Episodes[a].EpisodeNumber < season.Episodes[b].EpisodeNumber
+		})
+	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"show":    showDetails,
 		"seasons": allSeasons,
@@ -675,6 +680,15 @@ func handleAPIWriter(w http.ResponseWriter, r *http.Request) {
 	}()
 	for wc := range resultsCh {
 		writingCredits = append(writingCredits, wc)
+	}
+	for i := range writingCredits {
+		sort.Slice(writingCredits[i].Episodes, func(a, b int) bool {
+			ea, eb := writingCredits[i].Episodes[a], writingCredits[i].Episodes[b]
+			if ea.SeasonNumber != eb.SeasonNumber {
+				return ea.SeasonNumber < eb.SeasonNumber
+			}
+			return ea.EpisodeNumber < eb.EpisodeNumber
+		})
 	}
 	sort.Slice(writingCredits, func(i, j int) bool {
 		return writingCredits[i].FirstAirDate > writingCredits[j].FirstAirDate
