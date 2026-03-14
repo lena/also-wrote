@@ -243,11 +243,11 @@ func (db *DB) IsFavoriteWriter(userID int64, personID int) (bool, error) {
 
 // UserWithFavoriteCount is a user row with their favorite writers count and login info (for admin list).
 type UserWithFavoriteCount struct {
-	ID                   int64
-	Email                string
-	FavoriteWritersCount int
-	LoginCount           int64
-	LastLoginAt          *time.Time
+	ID                   int64      `json:"id"`
+	Email                string     `json:"email"`
+	FavoriteWritersCount int        `json:"favorite_writers_count"`
+	LoginCount           int64      `json:"login_count"`
+	LastLoginAt          *time.Time `json:"last_login_at"`
 }
 
 // ListUsersWithFavoriteCount returns all users with favorite writer count and login info, ordered by user id.

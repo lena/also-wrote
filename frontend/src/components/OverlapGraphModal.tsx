@@ -19,9 +19,158 @@ interface GraphLink {
 const IMAGE_BASE = 'https://image.tmdb.org/t/p/w154'
 const writerLinkColors = ['#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899', '#f43f5e', '#0ea5e9', '#14b8a6', '#eab308', '#f97316']
 
+function setupPanZoom(
+  viewportEl: HTMLDivElement,
+  containerEl: HTMLDivElement,
+  graphW: number,
+  graphH: number
+): () => void {
+  const cw = containerEl.offsetWidth
+  const ch = containerEl.offsetHeight
+  const minScale = Math.max(cw / graphW, ch / graphH)
+  const maxScale = 3
+  let scale = minScale
+  let tx = (cw - graphW * scale) / (2 * scale)
+  let ty = (ch - graphH * scale) / (2 * scale)
+
+  function clampPan() {
+    const viewW = graphW * scale
+    const viewH = graphH * scale
+    const marginTop = 20
+    const curCw = containerEl.offsetWidth
+    const rect = containerEl.getBoundingClientRect()
+    const visibleBottom = typeof window !== 'undefined' ? Math.min(rect.bottom, window.innerHeight) : rect.bottom
+    const visibleTop = typeof window !== 'undefined' ? Math.max(rect.top, 0) : rect.top
+    const visibleCh = Math.max(0, visibleBottom - visibleTop)
+    const maxTx = viewW >= curCw ? 0 : (curCw - viewW) / scale
+    const minTx = viewW >= curCw ? (curCw - viewW) / scale : 0
+    const maxTy = marginTop / scale
+    // Use visible container height so when modal is scrolled we still allow pan to visible bottom
+    const minTy = (visibleCh - viewH) / scale
+    tx = Math.max(minTx, Math.min(maxTx, tx))
+    ty = Math.max(minTy, Math.min(maxTy, ty))
+  }
+
+  function applyTransform() {
+    clampPan()
+    viewportEl.style.transform = `scale(${scale}) translate(${tx}px, ${ty}px)`
+  }
+  applyTransform()
+
+  let lastDist = 0
+  let lastCenterX = 0
+  let lastCenterY = 0
+  let lastSingleX = 0
+  let lastSingleY = 0
+  let totalDx = 0
+  let totalDy = 0
+  let panning = false
+  const tapThreshold = 10
+
+  function dist(t1: Touch, t2: Touch) {
+    return Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY)
+  }
+  function centerX(t1: Touch, t2: Touch) {
+    return (t1.clientX + t2.clientX) / 2
+  }
+  function centerY(t1: Touch, t2: Touch) {
+    return (t1.clientY + t2.clientY) / 2
+  }
+
+  const onTouchStart = (e: TouchEvent) => {
+    if (e.touches.length === 2) {
+      panning = true
+      lastDist = dist(e.touches[0], e.touches[1])
+      lastCenterX = centerX(e.touches[0], e.touches[1])
+      lastCenterY = centerY(e.touches[0], e.touches[1])
+    } else if (e.touches.length === 1) {
+      totalDx = 0
+      totalDy = 0
+      panning = false
+      lastSingleX = e.touches[0].clientX
+      lastSingleY = e.touches[0].clientY
+    }
+  }
+
+  const onTouchMove = (e: TouchEvent) => {
+    if (e.touches.length === 2) {
+      e.preventDefault()
+      panning = true
+      const d = dist(e.touches[0], e.touches[1])
+      const cx = centerX(e.touches[0], e.touches[1])
+      const cy = centerY(e.touches[0], e.touches[1])
+      if (lastDist > 0) {
+        const newScale = scale * (d / lastDist)
+        scale = Math.max(minScale, Math.min(maxScale, newScale))
+        const dx = (cx - lastCenterX) / scale
+        const dy = (cy - lastCenterY) / scale
+        tx += dx
+        ty += dy
+      }
+      lastDist = d
+      lastCenterX = cx
+      lastCenterY = cy
+      applyTransform()
+    } else if (e.touches.length === 1) {
+      const dx = e.touches[0].clientX - lastSingleX
+      const dy = e.touches[0].clientY - lastSingleY
+      totalDx += dx
+      totalDy += dy
+      if (!panning && (Math.abs(totalDx) > tapThreshold || Math.abs(totalDy) > tapThreshold)) {
+        panning = true
+        e.preventDefault()
+        tx += totalDx / scale
+        ty += totalDy / scale
+        lastSingleX = e.touches[0].clientX
+        lastSingleY = e.touches[0].clientY
+        applyTransform()
+      } else if (panning) {
+        e.preventDefault()
+        tx += dx / scale
+        ty += dy / scale
+        lastSingleX = e.touches[0].clientX
+        lastSingleY = e.touches[0].clientY
+        applyTransform()
+      }
+    }
+  }
+
+  const onTouchEnd = (e: TouchEvent) => {
+    if (e.touches.length === 2) {
+      lastDist = dist(e.touches[0], e.touches[1])
+      lastCenterX = centerX(e.touches[0], e.touches[1])
+      lastCenterY = centerY(e.touches[0], e.touches[1])
+    } else if (e.touches.length === 1) {
+      lastSingleX = e.touches[0].clientX
+      lastSingleY = e.touches[0].clientY
+    } else {
+      lastDist = 0
+    }
+  }
+
+  containerEl.addEventListener('touchstart', onTouchStart, { passive: true })
+  containerEl.addEventListener('touchmove', onTouchMove, { passive: false })
+  containerEl.addEventListener('touchend', onTouchEnd, { passive: true })
+
+  return () => {
+    containerEl.removeEventListener('touchstart', onTouchStart)
+    containerEl.removeEventListener('touchmove', onTouchMove)
+    containerEl.removeEventListener('touchend', onTouchEnd)
+  }
+}
+
 interface OverlapGraphModalProps {
   onClose: () => void
   userId?: number
+}
+
+type GraphDataRef = {
+  linkEls: d3.Selection<SVGLineElement, { source: GraphNode; target: GraphNode }, d3.BaseType, unknown>
+  nodeWrap: d3.Selection<HTMLDivElement, GraphNode, d3.BaseType, unknown>
+  writerColorScale: Record<string, string>
+  showToWriters: Record<string, string[]>
+  showWriterCount: Record<string, number>
+  writerToShows: Record<string, string[]>
 }
 
 export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModalProps) {
@@ -32,6 +181,12 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const simRef = useRef<d3.Simulation<GraphNode, GraphLink> | null>(null)
+  const graphDataRef = useRef<GraphDataRef | null>(null)
+  const panZoomCleanupRef = useRef<(() => void) | null>(null)
+  const [writerList, setWriterList] = useState<{ id: string; name: string }[]>([])
+  const [maxOverlap, setMaxOverlap] = useState(1)
+  const [hiddenWriters, setHiddenWriters] = useState<string[]>([])
+  const [minOverlap, setMinOverlap] = useState(1)
 
   useEffect(() => {
     if (!containerRef.current || !viewportRef.current || !linksSvgRef.current || !nodesDivRef.current) return
@@ -102,11 +257,27 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
         }
 
         const container = containerRef.current
+        const viewport = viewportRef.current
         const linksSvg = linksSvgRef.current
         const nodesDiv = nodesDivRef.current
-        if (!container || !linksSvg || !nodesDiv) return
-        const graphWidth = container.offsetWidth
-        const graphHeight = container.offsetHeight
+        if (!container || !viewport || !linksSvg || !nodesDiv) return
+
+        const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
+        let graphWidth: number
+        let graphHeight: number
+        if (isMobile) {
+          graphWidth = 1200
+          graphHeight = 900
+          viewport.style.width = `${graphWidth}px`
+          viewport.style.height = `${graphHeight}px`
+          viewport.style.transformOrigin = '0 0'
+        } else {
+          graphWidth = container.offsetWidth
+          graphHeight = container.offsetHeight
+          viewport.style.width = '100%'
+          viewport.style.height = '100%'
+          viewport.style.transform = ''
+        }
         const width = graphWidth
         const height = graphHeight
         const centerX = axisWidth + (width - axisWidth - 2 * padding) / 2
@@ -130,6 +301,27 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
             return src && tgt ? { source: src, target: tgt } : null
           })
           .filter((x): x is { source: GraphNode; target: GraphNode } => x != null)
+
+        const writerIdSet = new Set(nodes.filter((n) => n.type === 'writer').map((n) => n.id))
+        const showToWriters: Record<string, string[]> = {}
+        const showWriterCount: Record<string, number> = {}
+        const writerToShows: Record<string, string[]> = {}
+        nodes.forEach((n) => {
+          if (n.type === 'show') showWriterCount[n.id] = n.writer_count || 0
+        })
+        linkData.forEach((link) => {
+          const writerId = writerIdSet.has(link.source.id) ? link.source.id : link.target.id
+          const showId = writerIdSet.has(link.source.id) ? link.target.id : link.source.id
+          if (!showToWriters[showId]) showToWriters[showId] = []
+          if (!showToWriters[showId].includes(writerId)) showToWriters[showId].push(writerId)
+          if (!writerToShows[writerId]) writerToShows[writerId] = []
+          if (!writerToShows[writerId].includes(showId)) writerToShows[writerId].push(showId)
+        })
+
+        setWriterList(writerNodes.map((w) => ({ id: w.id, name: w.name || '' })))
+        setMaxOverlap(Math.max(1, maxWriterCount))
+        setHiddenWriters([])
+        setMinOverlap(1)
 
         const maxPriority = Math.max(...nodes.map((d) => d.priority || 0), 1)
         nodes.forEach((n, i) => {
@@ -215,20 +407,34 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
           }
         })
 
+        graphDataRef.current = {
+          linkEls,
+          nodeWrap,
+          writerColorScale,
+          showToWriters,
+          showWriterCount,
+          writerToShows,
+        }
+
         const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x))
         const minCardLeftEdge = axisWidth + 20
+        const bottomMargin = 24
 
         function ticked() {
           nodes.forEach((d) => {
             const halfW = d.cardW / 2,
               halfH = d.cardH / 2
             d.x = clamp(d.x, minCardLeftEdge + halfW, width - padding - halfW)
-            d.y = clamp(d.y, padding + halfH, height - padding - halfH)
+            d.y = clamp(d.y, padding + halfH, height - padding - halfH - bottomMargin)
           })
           linkEls.attr('x1', (d) => d.source.x).attr('y1', (d) => d.source.y).attr('x2', (d) => d.target.x).attr('y2', (d) => d.target.y)
           nodeWrap.style('left', (d) => `${d.x - d.cardW / 2}px`).style('top', (d) => `${d.y - d.cardH / 2}px`)
         }
         sim.on('tick', ticked)
+
+        if (isMobile) {
+          panZoomCleanupRef.current = setupPanZoom(viewport, container, graphWidth, graphHeight)
+        }
       })
       .catch(() => {
         setLoading(false)
@@ -236,15 +442,73 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
       })
 
     return () => {
+      panZoomCleanupRef.current?.()
+      panZoomCleanupRef.current = null
       simRef.current?.stop()
       simRef.current = null
+      graphDataRef.current = null
     }
   }, [userId])
+
+  useEffect(() => {
+    const g = graphDataRef.current
+    if (!g) return
+    const hiddenSet = new Set(hiddenWriters)
+    const showPassesOverlap = (d: GraphNode) => ((d.writer_count ?? 0) as number) >= minOverlap
+    const writerPassesOverlap = (writerId: string) => {
+      const showIds = g.writerToShows[writerId]
+      if (!showIds?.length) return false
+      return showIds.some((showId) => (g.showWriterCount[showId] ?? 0) >= minOverlap)
+    }
+    g.linkEls.attr('stroke-opacity', (d) => {
+      const writerId = d.source.type === 'writer' ? d.source.id : d.target.id
+      const showNode = d.source.type === 'show' ? d.source : d.target
+      if (hiddenSet.has(writerId)) return 0
+      if (!showPassesOverlap(showNode) || !writerPassesOverlap(writerId)) return 0
+      return 0.85
+    })
+    g.nodeWrap.style('opacity', (d) => {
+      if (d.type === 'writer') {
+        if (hiddenSet.has(d.id)) return '0'
+        return writerPassesOverlap(d.id) ? '1' : '0'
+      }
+      if (!showPassesOverlap(d)) return '0'
+      const writers = g.showToWriters[d.id]
+      if (!writers?.length) return '1'
+      const allHidden = writers.every((wid) => hiddenSet.has(wid))
+      return allHidden ? '0' : '1'
+    })
+    g.nodeWrap.style('pointer-events', (d) => {
+      if (d.type === 'writer') {
+        if (hiddenSet.has(d.id)) return 'none'
+        return writerPassesOverlap(d.id) ? 'auto' : 'none'
+      }
+      if (!showPassesOverlap(d)) return 'none'
+      const writers = g.showToWriters[d.id]
+      if (!writers?.length) return 'auto'
+      const allHidden = writers.every((wid) => hiddenSet.has(wid))
+      return allHidden ? 'none' : 'auto'
+    })
+  }, [hiddenWriters, minOverlap])
 
   useEffect(() => {
     document.body.classList.add('modal-open')
     return () => document.body.classList.remove('modal-open')
   }, [])
+
+  const toggleWriter = (id: string) => {
+    setHiddenWriters((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  const hiddenSet = new Set(hiddenWriters)
+  const writerPassesOverlapForLegend = (writerId: string) => {
+    const g = graphDataRef.current
+    if (!g) return true
+    const showIds = g.writerToShows[writerId]
+    if (!showIds?.length) return false
+    return showIds.some((showId) => (g.showWriterCount[showId] ?? 0) >= minOverlap)
+  }
+  const legendVisible = (writerId: string) => !hiddenSet.has(writerId) && writerPassesOverlapForLegend(writerId)
 
   return (
     <div className="fixed inset-0 z-[100]" aria-hidden="false">
@@ -268,11 +532,50 @@ export default function OverlapGraphModal({ onClose, userId }: OverlapGraphModal
           {error && (
             <div className="absolute inset-0 flex items-center justify-center text-red-400 bg-slate-800/90 z-10">{error}</div>
           )}
-          <div ref={viewportRef} className="absolute left-0 top-0 w-full h-full">
+          <div ref={viewportRef} className="absolute left-0 top-0 w-full h-full will-change-transform">
             <svg ref={linksSvgRef} className="absolute inset-0 w-full h-full pointer-events-none" aria-hidden="true" />
             <div ref={nodesDivRef} className="absolute inset-0 pointer-events-none" />
           </div>
         </div>
+        {writerList.length > 0 && (
+          <div className="flex flex-col sm:flex-row sm:items-start gap-3 px-4 py-1.5 border-t border-slate-600 shrink-0 bg-slate-800/50 text-slate-300 text-xs">
+            <div className="flex flex-wrap items-center gap-3 min-w-0 flex-1 max-h-[6rem] overflow-y-auto overflow-x-hidden episode-list-scroll md:max-h-none md:overflow-visible">
+              {writerList.map((w) => {
+                const color = graphDataRef.current?.writerColorScale[w.id] ?? '#6366f1'
+                const visible = legendVisible(w.id)
+                return (
+                  <button
+                    key={w.id}
+                    type="button"
+                    onClick={() => toggleWriter(w.id)}
+                    className={`inline-flex items-center gap-1.5 cursor-pointer rounded px-1.5 py-0.5 hover:bg-slate-700 transition text-left border border-transparent hover:border-slate-600 shrink-0 ${!visible ? 'opacity-50' : ''}`}
+                    aria-pressed={hiddenSet.has(w.id)}
+                    title={hiddenSet.has(w.id) ? 'Show writer' : 'Hide writer'}
+                  >
+                    <span className="legend-dot rounded-full w-3 h-3 shrink-0" style={{ background: color }} />
+                    <span className="legend-name truncate max-w-[120px]">{w.name}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="flex flex-nowrap items-center gap-2 min-w-0 overflow-x-auto scrollbar-hide-x shrink-0">
+              <span className="text-slate-400 shrink-0 font-medium">Overlap:</span>
+              {Array.from({ length: maxOverlap }, (_, i) => i + 1).map((n) => (
+                <label key={n} className="inline-flex items-center gap-1.5 cursor-pointer select-none shrink-0">
+                  <input
+                    type="radio"
+                    name="overlap-min"
+                    value={n}
+                    checked={minOverlap === n}
+                    onChange={() => setMinOverlap(n)}
+                    className="rounded border-slate-500 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span>{n}+</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
         <p className="text-slate-400 text-sm px-4 py-2 border-t border-slate-600 shrink-0">
           Shows your favorite writers have worked on. Line color = writer. Larger show cards = more of your favorite writers worked on it.
         </p>

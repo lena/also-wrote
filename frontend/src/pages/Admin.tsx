@@ -45,7 +45,7 @@ export default function Admin() {
                 <th className="px-4 py-3 font-semibold">Email</th>
                 <th className="px-4 py-3 font-semibold text-right">Favorite writers</th>
                 <th className="px-4 py-3 font-semibold text-right">Logins</th>
-                <th className="px-4 py-3 font-semibold">Last login (PT)</th>
+                <th className="px-4 py-3 font-semibold min-w-[11rem]">Last login (PT)</th>
               </tr>
             </thead>
             <tbody>
@@ -64,7 +64,7 @@ export default function Admin() {
                     </button>
                   </td>
                   <td className="px-4 py-3 text-right">{u.login_count}</td>
-                  <td className="px-4 py-3 text-slate-400">{formatPacificTime(u.last_login_at)}</td>
+                  <td className="px-4 py-3 text-slate-400 min-w-[11rem] whitespace-nowrap">{formatPacificTime(u.last_login_at)}</td>
                 </tr>
               ))}
             </tbody>

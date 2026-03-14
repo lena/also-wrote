@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../AuthContext'
 import { formatDate } from '../AuthContext'
+import EpisodeListWithFades from '../components/EpisodeListWithFades'
 import type { Person, WriterCredit } from '../types'
 
 const IMAGE_BASE = 'https://image.tmdb.org/t/p'
@@ -133,18 +134,31 @@ export default function Writer() {
                 {credit.episodes && credit.episodes.length > 0 && (
                   <div className="mt-4 border-t pt-3 flex-grow">
                     <p className="text-xs font-bold text-gray-500 uppercase mb-2">Credited Episodes:</p>
-                    <ul className="space-y-1 max-h-48 overflow-y-auto episode-list-scroll pr-2">
+                    <EpisodeListWithFades>
                       {credit.episodes.map((ep) => (
                         <li key={ep.id}>
                           <Link
                             to={`/episode?show_id=${credit.id}&season=${ep.season_number}&episode=${ep.episode_number}`}
-                            className="text-sm text-gray-700 truncate hover:text-indigo-600 transition flex items-center"
+                            className="text-sm text-gray-700 truncate hover:text-indigo-600 transition flex items-center group/item"
+                            title={ep.name}
                           >
-                            S{ep.season_number} E{ep.episode_number}: {ep.name}
+                            <span className="font-mono text-xs text-indigo-500 font-bold mr-2 w-14 text-right shrink-0 group-hover/item:text-indigo-700">
+                              S{ep.season_number} E{ep.episode_number}
+                            </span>
+                            <span className="truncate">{ep.name}</span>
                           </Link>
                         </li>
                       ))}
-                    </ul>
+                    </EpisodeListWithFades>
+                    <Link
+                      to={`/show?id=${credit.id}`}
+                      className="mt-4 pt-2 text-indigo-600 font-semibold text-sm hover:text-indigo-800 transition flex items-center justify-end"
+                    >
+                      Go to Show
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                      </svg>
+                    </Link>
                   </div>
                 )}
               </div>
